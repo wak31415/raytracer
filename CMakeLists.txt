@@ -10,6 +10,6 @@ include_directories(include)
 
 add_executable(lab_1 ${SOURCE_FILES})
 
-set_property(TARGET lab_1 PROPERTY CUDA_ARCHITECTURES 61)
+set_property(TARGET lab_1 PROPERTY CUDA_ARCHITECTURES 52 61)
 
 target_link_libraries(lab_1 cudart)
