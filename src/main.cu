@@ -1,6 +1,6 @@
 #include <stdio.h>
-#include "cu_vector.h"
-#include "cu_matrix.h"
+#include "vector.cuh"
+#include "matrix.cuh"
 #define N 1000
 
 int write_image();
