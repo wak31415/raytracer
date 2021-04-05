@@ -1,10 +1,10 @@
 #include <cuda.h>
 
-template <int VecSize>
+template <size_t VecSize>
 class CU_Vector {
     public:
         __host__ __device__ CU_Vector() : N(VecSize) {
-            memset(data, 0, sizeof(data));
+            memset(data, 0, sizeof(float)*N);
         }
 
         __host__ __device__ CU_Vector(float* data) : N(VecSize) {
@@ -17,7 +17,7 @@ class CU_Vector {
             data[2] = z;
         }
 
-        __host__ __device__ int get_size() { return N; }
+        __host__ __device__ size_t get_size() { return N; }
 
         __host__ __device__ const float& operator[](int i) const { return data[i]; }
         __host__ __device__ float& operator[](int i) { return data[i]; }
@@ -85,7 +85,7 @@ __host__ __device__ Vec operator+(Vec a, Vec b) {
     return result;
 };
 
-template <int VecSize, class T>
+template <size_t VecSize, class T>
 __host__ __device__ CU_Vector<VecSize> operator*(const T &scalar, const CU_Vector<VecSize> &v) {
     float data[VecSize];
     for (int i = 0; i < VecSize; i++)
@@ -94,7 +94,7 @@ __host__ __device__ CU_Vector<VecSize> operator*(const T &scalar, const CU_Vecto
     return CU_Vector<VecSize>(data);
 };
 
-template <int VecSize, class T>
+template <size_t VecSize, class T>
 __host__ __device__ CU_Vector<VecSize> operator*(const CU_Vector<VecSize> &v, const T &scalar) {
     return scalar * v;
 };
