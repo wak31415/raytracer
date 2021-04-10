@@ -1,4 +1,5 @@
-#include <cuda.h>
+#ifndef CU_VECTOR_CUH
+#define CU_VECTOR_CUH
 
 template <size_t VecSize>
 class CU_Vector {
@@ -76,11 +77,20 @@ typedef CU_Vector<3> CU_Vector3f;
 
 
 // Overload vector operations
-template <class Vec>
-__host__ __device__ Vec operator+(Vec a, Vec b) {
-    Vec result;
-    for(int i = 0; i < a.get_size(); i++) {
+template <size_t VecSize>
+__host__ __device__ CU_Vector<VecSize> operator+(CU_Vector<VecSize> a, CU_Vector<VecSize> b) {
+    CU_Vector<VecSize> result;
+    for(int i = 0; i < VecSize; i++) {
         result[i] = a[i] + b[i];
+    }
+    return result;
+};
+
+template <size_t VecSize>
+__host__ __device__ CU_Vector<VecSize> operator-(CU_Vector<VecSize> a, CU_Vector<VecSize> b) {
+    CU_Vector<VecSize> result;
+    for(int i = 0; i < VecSize; i++) {
+        result[i] = a[i] - b[i];
     }
     return result;
 };
@@ -101,13 +111,15 @@ __host__ __device__ CU_Vector<VecSize> operator*(const CU_Vector<VecSize> &v, co
 
 
 // Define dot and cross products
-template <class Vec>
-__host__ __device__ float dot(const Vec& a, const Vec& b) {
+template <size_t VecSize>
+__host__ __device__ float dot(const CU_Vector<VecSize>& a, const CU_Vector<VecSize>& b) {
     float dot_prod = 0.f;
-    for(int i = 0; i < a.get_size(); i++) dot_prod += a[i]*b[i];
+    for(int i = 0; i < VecSize; i++) dot_prod += a[i]*b[i];
     return dot_prod;
 };
 
-__host__ __device__ CU_Vector<3> cross(const CU_Vector<3> &a, const CU_Vector<3> &b) {
-    return CU_Vector<3>(a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]);
-};
+// __host__ __device__ CU_Vector<3> cross(const CU_Vector<3> &a, const CU_Vector<3> &b) {
+//     return CU_Vector<3>(a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]);
+// };
+
+#endif

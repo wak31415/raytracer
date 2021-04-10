@@ -1,23 +1,50 @@
-#include <cuda.h>
-
 template <size_t MatSize>
 class CU_Matrix {
     public:
-        __host__ __device__ CU_Matrix() : N(MatSize) {
-            memset(data, 0, N*N*sizeof(float));
+        __host__ __device__ CU_Matrix() {
+            memset(data, 0, MatSize*MatSize*sizeof(float));
         }
 
-        __host__ __device__ CU_Matrix(float *data) : N(MatSize) {
-            memcpy(this->data, data, N*N*sizeof(float));
+        __host__ __device__ CU_Matrix(float *data) {
+            memcpy(this->data, data, MatSize*MatSize*sizeof(float));
         }
 
-        __host__ __device__ size_t get_size() { return N; }
+        __host__ __device__ void set_identity() {
+            memset(data, 0, MatSize*MatSize*sizeof(float));
+            for(size_t i = 0; i < MatSize; i++) {
+                data[i*MatSize + i] = 1.f;
+            }
+        }
+
+        __host__ __device__ CU_Matrix<3> get_rotation() {
+            if(MatSize != 4) return CU_Matrix<3>();
+
+            CU_Matrix<3> res;
+            for(size_t i = 0; i < 3; i++) {
+                for(size_t j = 0; j < 3; j++) {
+                    res(i, j) = data[i*MatSize + j];
+                }
+            }
+            return res;
+        }
+
+        __host__ __device__ CU_Vector3f get_translation() {
+            if(MatSize != 4) return CU_Vector3f();
+
+            CU_Vector3f res;
+            for(size_t i = 0; i < 3; i++) {
+                res[i] = data[i*MatSize + 3];
+            }
+            return res;
+        }
+
+        __host__ __device__ size_t get_size() { return MatSize; }
 
         __host__ __device__ const float& operator[](int i) const { return data[i]; }
         __host__ __device__ float& operator[](int i) { return data[i]; }
+        __host__ __device__ float& operator()(int i, int j) { return data[i*MatSize + j]; }
 
     protected:
-        int N;
         float data[MatSize*MatSize];
 };
 
