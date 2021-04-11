@@ -35,22 +35,17 @@ Scene::~Scene() {
 void Scene::create_default_scene() {
 
     // Initialize camera position
+    camera->E[1*4+1] = -1.f;
+    camera->E[2*4+2] = -1.f;
     rotate_camera(0.f, 0.f, 0.f);
     transform_camera(0.f, 0.f, 55.f);
 
-    printf("Camera extrinsics:\n");
-    printf("[%.3f, %.3f, %.3f, %.3f]\n", camera->E(0,0), camera->E(0,1), camera->E(0,2), camera->E(0,3));
-    printf("[%.3f, %.3f, %.3f, %.3f]\n", camera->E(1,0), camera->E(1,1), camera->E(1,2), camera->E(1,3));
-    printf("[%.3f, %.3f, %.3f, %.3f]\n", camera->E(2,0), camera->E(2,1), camera->E(2,2), camera->E(2,3));
-    printf("[%.3f, %.3f, %.3f, %.3f]\n", camera->E(3,0), camera->E(3,1), camera->E(3,2), camera->E(3,3));
-
-
     spheres.clear();
 
-    add_sphere(CU_Vector3f(0.f, 0.f, 0.f), 10.f, CU_Vector3f(0.2, 0.2, 0.2));         // center sphere
+    add_sphere(CU_Vector3f(0.f, 0.f, 0.f), 10.f, CU_Vector3f(0.5, 0.5, 0.5));         // center sphere
     add_sphere(CU_Vector3f(0.f, 0.f, -1000.f), 940.f, CU_Vector3f(0.f, 1.f, 0.f));    // green sphere
     add_sphere(CU_Vector3f(0.f, -1000.f, 0.f), 990.f, CU_Vector3f(0.f, 0.f, 1.f));    // blue sphere
-    add_sphere(CU_Vector3f(0.f, 0.f, 1000.f), 940.f, CU_Vector3f(0.f, 0.f, 0.f));       
+    add_sphere(CU_Vector3f(0.f, 0.f, 1000.f), 940.f, CU_Vector3f(1.f, 0.f, 1.f));       // magenta sphere
     add_sphere(CU_Vector3f(0.f, 1000.f, 0.f), 940.f, CU_Vector3f(1.f, 0.f, 0.f));
 }
 
@@ -67,16 +62,19 @@ void Scene::render() {
         image_rgb[3*i + 2] = (unsigned char)(255*image[i][2]);
     }
     stbi_write_png("image.png", camera->width, camera->height, 3, &image_rgb[0], 0);
-
-    for(int i = 0; i < 10; i++) {
-        printf("Vertex on sphere %d: (%.3f, %.3f, %.3f)\n", visible[i], vertices[i][0], vertices[i][1], vertices[i][2]);
-    }
 }
 
 void Scene::set_camera_intrinsics(float fov, size_t width, size_t height) {
     CU_Matrix<3> K;
+    // f: focal length
+    // W: sensor width
+    // H: sensor height
+    // w: image width (pixels)
+    // h: image height (pixels)
+    // f_x = f*w/W
+    // f_y = f*h/H
     camera->K[0*3 + 0] = width / (2*tanf(PI * fov / 360.f));    // f_x
-    camera->K[1*3 + 1] = width / (2*tanf(PI * fov / 360.f));    // f_y
+    camera->K[1*3 + 1] = height / (2*tanf(PI * fov / 360.f));    // f_y
     camera->K[2*3 + 2] = 1.f;                                   // 1
 
     camera->K[0*3 + 2] = width / 2;     // c_x
@@ -125,7 +123,6 @@ void Scene::add_sphere(CU_Vector3f pos, float radius, CU_Vector3f color) {
     s.pos = pos;
     s.radius = radius;
     s.color = color;
-    // memcpy(s.color, color, sizeof(CU_Vector3f));
     spheres.push_back(s);
 }
 
