@@ -14,3 +14,8 @@ struct Camera {
     size_t width = 512;
     size_t height = 512;
 };
+
+struct Light {
+    CU_Vector3f pos;
+    float I;
+};

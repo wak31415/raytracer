@@ -1,3 +1,7 @@
+#include <nlohmann/json.hpp>
+#include <fstream>
+#include <stdio.h>
+
 #include "cuda/scene.cuh"
 
 #define PI 3.14159265358979
@@ -8,7 +12,18 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
 
-void raytrace_spheres(Sphere* spheres, size_t sphere_count, int* visible, CU_Vector3f* vertices, CU_Vector3f* normals, CU_Vector3f* image, Camera* camera);
+using json = nlohmann::json;
+
+void raytrace_spheres(Sphere* spheres, 
+                      size_t sphere_count, 
+                      Light* lights, 
+                      size_t light_count, 
+                      int* visible, 
+                      CU_Vector3f* vertices, 
+                      CU_Vector3f* normals, 
+                      CU_Vector3f* image, 
+                      Camera* camera
+);
 
 Scene::Scene() {
     camera = (Camera*)malloc(sizeof(struct Camera));
@@ -32,6 +47,49 @@ Scene::~Scene() {
     free(image);
 }
 
+void Scene::load_scene(std::string filepath) {
+    camera->E[1*4+1] = -1.f;
+    camera->E[2*4+2] = -1.f;
+
+    std::ifstream ifs("../scene.json");
+    json jf = json::parse(ifs);
+
+    spheres.clear();
+
+    CU_Vector3f camera_pos(jf["camera"]["pos"][0],
+                           jf["camera"]["pos"][1],
+                           jf["camera"]["pos"][2]);
+
+    CU_Vector3f camera_rot(jf["camera"]["rotation"][0],
+                           jf["camera"]["rotation"][1],
+                           jf["camera"]["rotation"][2]);
+
+    rotate_camera(camera_rot);
+    transform_camera(camera_pos);
+
+    // Add spheres
+    for(int i = 0; i < jf["spheres"].size(); i ++) {
+        CU_Vector3f pos(jf["spheres"][i]["pos"][0],
+                        jf["spheres"][i]["pos"][1],
+                        jf["spheres"][i]["pos"][2]);
+
+        CU_Vector3f color(jf["spheres"][i]["color"][0],
+                          jf["spheres"][i]["color"][1],
+                          jf["spheres"][i]["color"][2]);
+
+        add_sphere(pos, jf["spheres"][i]["radius"], color);
+    }
+
+    // Add lights
+    for(int i = 0; i < jf["lights"].size(); i ++) {
+        CU_Vector3f pos(jf["lights"][i]["pos"][0],
+                        jf["lights"][i]["pos"][1],
+                        jf["lights"][i]["pos"][2]);
+
+        add_light(pos, jf["lights"][i]["intensity"]);
+    }
+}
+
 void Scene::create_default_scene() {
 
     // Initialize camera position
@@ -47,10 +105,12 @@ void Scene::create_default_scene() {
     add_sphere(CU_Vector3f(0.f, -1000.f, 0.f), 990.f, CU_Vector3f(0.f, 0.f, 1.f));    // blue sphere
     add_sphere(CU_Vector3f(0.f, 0.f, 1000.f), 940.f, CU_Vector3f(1.f, 0.f, 1.f));       // magenta sphere
     add_sphere(CU_Vector3f(0.f, 1000.f, 0.f), 940.f, CU_Vector3f(1.f, 0.f, 0.f));
+
+    add_light(CU_Vector3f(-20.f, 20.f, 30.f), 100000.f);
 }
 
 void Scene::render() {
-    raytrace_spheres(&spheres[0], spheres.size(), visible, vertices, normals, image, camera);
+    raytrace_spheres(&spheres[0], spheres.size(), &lights[0], lights.size(), visible, vertices, normals, image, camera);
 
     size_t num_pixels = camera->width*camera->height;
 
@@ -112,10 +172,20 @@ void Scene::rotate_camera(float alpha, float beta, float gamma) {
     camera->E = R*camera->E;
 }
 
+void Scene::rotate_camera(CU_Vector3f rotation) {
+    rotate_camera(rotation[0], rotation[1], rotation[2]);
+}
+
 void Scene::transform_camera(float x, float y, float z) {
     camera->E[0*4 + 3] += x;
     camera->E[1*4 + 3] += y;
     camera->E[2*4 + 3] += z;
+}
+
+void Scene::transform_camera(CU_Vector3f direction) {
+    camera->E[0*4 + 3] += direction[0];
+    camera->E[1*4 + 3] += direction[1];
+    camera->E[2*4 + 3] += direction[2];
 }
 
 void Scene::add_sphere(CU_Vector3f pos, float radius, CU_Vector3f color) {
@@ -124,6 +194,13 @@ void Scene::add_sphere(CU_Vector3f pos, float radius, CU_Vector3f color) {
     s.radius = radius;
     s.color = color;
     spheres.push_back(s);
+}
+
+void Scene::add_light(CU_Vector3f pos, float intensity) {
+    Light l;
+    l.pos = pos;
+    l.I = intensity;
+    lights.push_back(l);
 }
 
 std::vector<Sphere> Scene::get_spheres() { return spheres; }
