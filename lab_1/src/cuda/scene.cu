@@ -64,6 +64,14 @@ void Scene::load_scene(std::string filepath) {
                            jf["camera"]["rotation"][1],
                            jf["camera"]["rotation"][2]);
 
+    uint width = (uint)jf["camera"]["width"];
+    uint height = (uint)jf["camera"]["height"];
+    float fov = jf["camera"]["fov"];
+
+    set_camera_intrinsics(fov, width, height);
+
+    // printf("camera (width, height) = (%d, %d)\n", camera->width, camera->height);
+
     rotate_camera(camera_rot);
     transform_camera(camera_pos);
 
@@ -91,6 +99,12 @@ void Scene::load_scene(std::string filepath) {
 
         add_light(pos, jf["lights"][i]["intensity"]);
     }
+
+    size_t vertex_count = this->camera->width * this->camera->height;
+    visible = (int*)realloc(visible, vertex_count*sizeof(int));
+    vertices = (CU_Vector3f*)realloc(vertices, vertex_count*sizeof(CU_Vector3f));
+    normals = (CU_Vector3f*)realloc(normals, vertex_count*sizeof(CU_Vector3f));
+    image = (CU_Vector3f*)realloc(image, vertex_count*sizeof(CU_Vector3f));
 }
 
 void Scene::render() {

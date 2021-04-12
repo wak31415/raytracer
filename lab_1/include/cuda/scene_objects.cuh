@@ -12,8 +12,8 @@ struct Camera {
     CU_Matrix<4> E;         // camera extrinsics
     CU_Matrix<4> E_inv;     // inv camera extrinsics
     CU_Matrix<3> K;         // camera intrinsics
-    size_t width = 512;
-    size_t height = 512;
+    uint width = 1024;
+    uint height = 1024;
 };
 
 struct Light {

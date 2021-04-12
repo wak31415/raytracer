@@ -4,7 +4,7 @@
 
 #define PI 3.14159265358979
 #define GAMMA 2.2
-#define MAX_RAY_DEPTH 7
+#define MAX_RAY_DEPTH 3
 
 __device__ CU_Vector3f clamp_color(CU_Vector3f color) {
     CU_Vector3f res;
@@ -201,8 +201,8 @@ void raytrace_spheres(Sphere* spheres, size_t sphere_count, Light* lights, size_
         cam_rot,
         cam_trans,
         camera->K,
-        512,
-        512
+        camera->width,
+        camera->height
     );
     cudaDeviceSynchronize();
 

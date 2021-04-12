@@ -16,7 +16,7 @@
             "pos": [0, -1000, 0],
             "radius" : 990,
             "color" : [0, 0, 1],
-            "specularity" : 0
+            "specularity" : 0.3
         },
         {
             "pos": [0, 0, 1000],
@@ -51,6 +51,9 @@
     ],
     "camera" : {
         "pos": [0, 0, 55],
-        "rotation": [0, 0, 0]
+        "rotation": [0, 0, 0],
+        "width": 512,
+        "height": 512,
+        "fov": 60
     }
 }
