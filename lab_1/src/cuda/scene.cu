@@ -77,7 +77,10 @@ void Scene::load_scene(std::string filepath) {
                           jf["spheres"][i]["color"][1],
                           jf["spheres"][i]["color"][2]);
 
-        add_sphere(pos, jf["spheres"][i]["radius"], color);
+        float R = jf["spheres"][i]["radius"];
+        float spec = jf["spheres"][i]["specularity"]
+
+        add_sphere(pos, R, color, spec);
     }
 
     // Add lights
@@ -188,11 +191,12 @@ void Scene::transform_camera(CU_Vector3f direction) {
     camera->E[2*4 + 3] += direction[2];
 }
 
-void Scene::add_sphere(CU_Vector3f pos, float radius, CU_Vector3f color) {
+void Scene::add_sphere(CU_Vector3f pos, float radius, CU_Vector3f color, float specularity) {
     Sphere s;
     s.pos = pos;
     s.radius = radius;
     s.color = color;
+    s.specularity = specularity;
     spheres.push_back(s);
 }
 

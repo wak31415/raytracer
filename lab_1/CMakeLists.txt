@@ -25,7 +25,3 @@ set_target_properties(lab_1 PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 
 set_property(TARGET scene PROPERTY CUDA_ARCHITECTURES 61)
 set_property(TARGET lab_1 PROPERTY CUDA_ARCHITECTURES 61)
-
-
-add_executable(json_test main.cpp)
-target_link_libraries(json_test jsoncpp)

@@ -5,6 +5,7 @@ struct Sphere {
     CU_Vector3f pos;
     float radius;
     CU_Vector3f color;
+    float specularity;
 };
 
 struct Camera {

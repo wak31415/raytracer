@@ -22,11 +22,11 @@ __device__ CU_Vector3f gamma_correct(CU_Vector3f color) {
     return res;
 }
 
-__device__ float get_intersection(Sphere* spheres, 
-                                  size_t sphere_count, 
-                                  CU_Vector3f ray, 
-                                  CU_Vector3f start, 
-                                  int* intersect_id) 
+__device__ CU_Vector3f get_intersection(Sphere* spheres, 
+                                        size_t sphere_count, 
+                                        CU_Vector3f ray, 
+                                        CU_Vector3f start, 
+                                        int* intersect_id) 
 {
     float min_dist = 0.f;
 
@@ -51,7 +51,7 @@ __device__ float get_intersection(Sphere* spheres,
             }
         }
     }
-    return min_dist;
+    return start + min_dist*ray;
 }
 
 __device__ bool is_visible(Sphere* spheres, size_t sphere_count, CU_Vector3f origin, CU_Vector3f target) {
@@ -61,6 +61,16 @@ __device__ bool is_visible(Sphere* spheres, size_t sphere_count, CU_Vector3f ori
     float t = get_intersection(spheres, sphere_count, ray, origin, &intersect_id);
     if (t < (target - origin).norm() && intersect_id >= 0) return false;
     return true;
+}
+
+__device__ CU_Vector3f reflected_direction(CU_Vector3f ray, CU_Vector3f normal) {
+    return ray - 2 * dot(ray, normal) * normal;
+}
+
+__device__ CU_Vector3f get_color(CU_Vector3f P, CU_Vector3f ray, int ray_depth) {
+    if (ray_depth < 0) return CU_Vector3f();
+
+
 }
 
 __global__ void raytrace_spheres_kernel(Sphere* spheres, 
@@ -91,12 +101,11 @@ __global__ void raytrace_spheres_kernel(Sphere* spheres,
     ray_dir = cam_rot*ray_dir;
 
     int min_id = -1;
-    float min_dist = get_intersection(spheres, sphere_count, ray_dir, camera_pos, &min_id);
+    CU_Vector3f P = get_intersection(spheres, sphere_count, ray_dir, camera_pos, &min_id);
 
     visible[idx] = min_id;
 
     if(min_id >= 0) {
-        CU_Vector3f P = camera_pos + min_dist*ray_dir;
         vertices[idx] = P;
         CU_Vector3f tmp = P - spheres[min_id].pos;
         normals[idx] = (1/tmp.norm()) * tmp;
