@@ -78,7 +78,7 @@ void Scene::load_scene(std::string filepath) {
                           jf["spheres"][i]["color"][2]);
 
         float R = jf["spheres"][i]["radius"];
-        float spec = jf["spheres"][i]["specularity"]
+        float spec = jf["spheres"][i]["specularity"];
 
         add_sphere(pos, R, color, spec);
     }
@@ -91,25 +91,6 @@ void Scene::load_scene(std::string filepath) {
 
         add_light(pos, jf["lights"][i]["intensity"]);
     }
-}
-
-void Scene::create_default_scene() {
-
-    // Initialize camera position
-    camera->E[1*4+1] = -1.f;
-    camera->E[2*4+2] = -1.f;
-    rotate_camera(0.f, 0.f, 0.f);
-    transform_camera(0.f, 0.f, 55.f);
-
-    spheres.clear();
-
-    add_sphere(CU_Vector3f(0.f, 0.f, 0.f), 10.f, CU_Vector3f(0.5, 0.5, 0.5));         // center sphere
-    add_sphere(CU_Vector3f(0.f, 0.f, -1000.f), 940.f, CU_Vector3f(0.f, 1.f, 0.f));    // green sphere
-    add_sphere(CU_Vector3f(0.f, -1000.f, 0.f), 990.f, CU_Vector3f(0.f, 0.f, 1.f));    // blue sphere
-    add_sphere(CU_Vector3f(0.f, 0.f, 1000.f), 940.f, CU_Vector3f(1.f, 0.f, 1.f));       // magenta sphere
-    add_sphere(CU_Vector3f(0.f, 1000.f, 0.f), 940.f, CU_Vector3f(1.f, 0.f, 0.f));
-
-    add_light(CU_Vector3f(-20.f, 20.f, 30.f), 100000.f);
 }
 
 void Scene::render() {
