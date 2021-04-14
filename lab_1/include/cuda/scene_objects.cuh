@@ -22,6 +22,7 @@ struct Camera {
     CU_Matrix<3> K;         // camera intrinsics
     uint width = 1024;
     uint height = 1024;
+    uint num_rays = 1;
 };
 
 struct Light {

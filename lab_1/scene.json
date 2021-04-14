@@ -67,7 +67,7 @@
     "lights" : [
         {
             "pos": [-20, 20, 30],
-            "intensity": 100000
+            "intensity": 20000000000
         }
     ],
     "camera" : {
@@ -75,6 +75,7 @@
         "rotation": [0, 0, 0],
         "width": 512,
         "height": 512,
-        "fov": 60
+        "fov": 60,
+        "num_rays" : 100
     }
 }

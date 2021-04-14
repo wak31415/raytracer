@@ -71,10 +71,10 @@ void Scene::load_scene(std::string filepath) {
 
     set_camera_intrinsics(fov, width, height);
 
-    // printf("camera (width, height) = (%d, %d)\n", camera->width, camera->height);
-
     rotate_camera(camera_rot);
     transform_camera(camera_pos);
+
+    camera->num_rays = jf["camera"]["num_rays"];
 
     // Add spheres
     for(int i = 0; i < jf["spheres"].size(); i ++) {
@@ -133,9 +133,9 @@ void Scene::render() {
     std::vector<unsigned char> image_rgb(3*num_pixels, 0);
 
     for(size_t i = 0; i < num_pixels; i++) {
-        image_rgb[3*i + 0] = (unsigned char)(255*image[i][0]);
-        image_rgb[3*i + 1] = (unsigned char)(255*image[i][1]);
-        image_rgb[3*i + 2] = (unsigned char)(255*image[i][2]);
+        image_rgb[3*i + 0] = (unsigned char)(fminf(image[i][0], 255));
+        image_rgb[3*i + 1] = (unsigned char)(fminf(image[i][1], 255));
+        image_rgb[3*i + 2] = (unsigned char)(fminf(image[i][2], 255));
     }
     stbi_write_png("image.png", camera->width, camera->height, 3, &image_rgb[0], 0);
 }
