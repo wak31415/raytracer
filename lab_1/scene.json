@@ -1,46 +1,67 @@
 {
     "spheres" : [
         {
+            "pos": [-20, 0, 0],
+            "radius" : 10,
+            "color" : [0.5, 0.5, 0.5],
+            "material" : "mirror"
+        },
+        {
             "pos": [0, 0, 0],
             "radius" : 10,
             "color" : [0.5, 0.5, 0.5],
-            "specularity" : 1
+            "material" : "glass",
+            "refractive_index" : [1, 1.5]
+        },
+        {
+            "pos": [20, 0, 0],
+            "radius" : 10,
+            "color" : [0.5, 0.5, 0.5],
+            "material" : "glass",
+            "refractive_index" : [1, 1.5]
+        },
+        {
+            "pos": [20, 0, 0],
+            "radius" : 9.5,
+            "color" : [0.5, 0.5, 0.5],
+            "material" : "glass",
+            "refractive_index" : [1.5, 1]
         },
         {
             "pos": [0, 0, -1000],
             "radius" : 940,
             "color" : [0, 1, 0],
-            "specularity" : 0
+            "material" : "diffuse"
         },
         {
             "pos": [0, -1000, 0],
             "radius" : 990,
             "color" : [0, 0, 1],
-            "specularity" : 0.3
+            "material" : "diffuse"
         },
         {
             "pos": [0, 0, 1000],
             "radius" : 940,
             "color" : [1, 0, 1],
-            "specularity" : 0
+            "material" : "diffuse"
         },
         {
             "pos": [0, 1000, 0],
             "radius" : 940,
             "color" : [1, 0, 0],
-            "specularity" : 0
+            "material" : "diffuse"
         },
         {
             "pos": [-1000, 0, 0],
             "radius" : 940,
             "color" : [0.25, 1, 1],
-            "specularity" : 0
+            "material" : "diffuse"
         },
         {
             "pos": [1000, 0, 0],
             "radius" : 940,
             "color" : [1, 1, 0.25],
-            "specularity" : 0
+            "material" : "diffuse"
         }
     ],
     "lights" : [

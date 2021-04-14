@@ -1,11 +1,19 @@
 #include "cuda/vector.cuh"
 #include "cuda/matrix.cuh"
 
+enum materials {
+    DIFFUSE = 0,
+    MIRROR,
+    GLASS,
+};
+
 struct Sphere {
     CU_Vector3f pos;
     float radius;
     CU_Vector3f color;
-    float specularity;
+    uint material;
+    float ro; // refractive index outside
+    float ri; // refractive index inside
 };
 
 struct Camera {

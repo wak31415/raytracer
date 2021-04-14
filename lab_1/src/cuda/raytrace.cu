@@ -4,7 +4,7 @@
 
 #define PI 3.14159265358979
 #define GAMMA 2.2
-#define MAX_RAY_DEPTH 3
+#define MAX_RAY_DEPTH 5
 
 __device__ CU_Vector3f clamp_color(CU_Vector3f color) {
     CU_Vector3f res;
@@ -69,7 +69,6 @@ __device__ CU_Vector3f reflected_direction(CU_Vector3f ray, CU_Vector3f normal) 
     return ray - 2 * dot(ray, normal) * normal;
 }
 
-template<int depth>
 __device__ CU_Vector3f get_color(Sphere* spheres, 
                                  size_t sphere_count, 
                                  Light* lights,
@@ -77,51 +76,103 @@ __device__ CU_Vector3f get_color(Sphere* spheres,
                                  CU_Vector3f start, 
                                  CU_Vector3f ray) 
 {
-    if(depth >= MAX_RAY_DEPTH) return CU_Vector3f();
-    int intersect_id = -1;
-    CU_Vector3f P = get_intersection(spheres, sphere_count, ray, start, &intersect_id);
-    
-    if(intersect_id >= 0) {
-        CU_Vector3f sphere_pos = spheres[intersect_id].pos;
-        CU_Vector3f sphere_color = spheres[intersect_id].color;
-        float specularity = spheres[intersect_id].specularity;
+    int depth = 0;
+    while(depth < MAX_RAY_DEPTH) {
+        // if(depth >= MAX_RAY_DEPTH) return CU_Vector3f();
+        int intersect_id = -1;
+        CU_Vector3f P = get_intersection(spheres, sphere_count, ray, start, &intersect_id);
+        
+        if(intersect_id >= 0) {
+            CU_Vector3f sphere_pos = spheres[intersect_id].pos;
+            CU_Vector3f sphere_color = spheres[intersect_id].color;
+            int material = spheres[intersect_id].material;
 
-        CU_Vector3f tmp = P - sphere_pos;
-        CU_Vector3f N = (1/tmp.norm()) * tmp;
+            CU_Vector3f tmp = P - sphere_pos;
+            CU_Vector3f N = (1/tmp.norm()) * tmp;
 
-        // Normalized vector point --> light
-        CU_Vector3f S_P = lights[0].pos - P;
-        float d = S_P.norm();
-        CU_Vector3f w_i = 1.f/d * S_P;
+            // Diffuse
+            if(material == DIFFUSE) {
+                // Normalized vector point --> light
+                CU_Vector3f S_P = lights[0].pos - P;
+                float d = S_P.norm();
+                CU_Vector3f w_i = 1.f/d * S_P;
 
-        float N_wi_dot = max(dot(N, w_i), 0.f);
+                float N_wi_dot = max(dot(N, w_i), 0.f);
 
-        // check if the light is visible from P
-        bool P_visible = is_visible(spheres, sphere_count, P+0.01*N, lights[0].pos);
+                // check if the light is visible from P
+                bool P_visible = is_visible(spheres, sphere_count, P+0.001*N, lights[0].pos);
 
-        CU_Vector3f L = clamp_color(lights[0].I / (4*powf(PI*d, 2.f)) * sphere_color * P_visible * N_wi_dot);
+                CU_Vector3f L = clamp_color(lights[0].I / (4*powf(PI*d, 2.f)) * sphere_color * P_visible * N_wi_dot);
 
-        CU_Vector3f diffuse = gamma_correct(L);
+                return gamma_correct(L);
+            }
 
-        if(specularity > 0.f) {
-            CU_Vector3f reflected_ray = reflected_direction(ray, N);
-            return (1-specularity)*diffuse + specularity*get_color<depth+1>(spheres, sphere_count, lights, light_count, P+0.01*N, reflected_ray);
+            // Mirror
+            else if(material == MIRROR) {
+                CU_Vector3f reflected_ray = reflected_direction(ray, N);
+                start = P+0.01*N;
+                ray = reflected_ray;
+            }
+
+            // Glass 
+            else if(material == GLASS) {
+                float ro = spheres[intersect_id].ro;
+                float ri = spheres[intersect_id].ri;
+
+                CU_Vector3f wt_T;
+                CU_Vector3f wt_N;
+
+                float wi_N_dot = dot(ray, N);
+
+                // ray coming from the inside
+                if(wi_N_dot > 0) {
+                    float tmp1 = ro;
+                    ro = ri;
+                    ri = tmp1;
+                    N = -1.f * N;
+                    wi_N_dot = dot(ray, N);
+                }
+
+                float tmp = 1.f - (ro/ri)*(ro/ri)*(1.f - wi_N_dot*wi_N_dot);
+
+                if(tmp < 0) {
+                    // Total internal reflection
+                    CU_Vector3f reflected_ray = reflected_direction(ray, N);
+                    
+                    start = P + 0.01*N;
+                    ray = reflected_ray;
+                } else {
+                    wt_T = ro / ri * (ray - wi_N_dot*N);
+                    wt_N = - sqrtf(tmp)*N;
+                    CU_Vector3f wt = wt_T + wt_N;
+
+                    start = P - 0.01*N;
+                    ray = wt;
+                    // n1 = n2;
+                }
+            }
+            depth = depth + 1;
         }
-        return diffuse;
+        else {
+            return CU_Vector3f();
+        }
     }
-    return CU_Vector3f();
+    return CU_Vector3f(0.5, 0.5, 0.5);
+
+
+    
 }
 
-template<>
-__device__ CU_Vector3f get_color<MAX_RAY_DEPTH>(Sphere* spheres, 
-                                                size_t sphere_count, 
-                                                Light* lights,
-                                                size_t light_count,
-                                                CU_Vector3f start, 
-                                                CU_Vector3f ray)
-{
-    return CU_Vector3f();
-}
+// template<>
+// __device__ CU_Vector3f get_color<MAX_RAY_DEPTH>(Sphere* spheres, 
+//                                                 size_t sphere_count, 
+//                                                 Light* lights,
+//                                                 size_t light_count,
+//                                                 CU_Vector3f start, 
+//                                                 CU_Vector3f ray)
+// {
+//     return CU_Vector3f();
+// }
 
 __global__ void raytrace_spheres_kernel(Sphere* spheres, 
                                         size_t sphere_count, 
@@ -150,7 +201,7 @@ __global__ void raytrace_spheres_kernel(Sphere* spheres,
     ray_dir.normalize();
     ray_dir = cam_rot*ray_dir;
 
-    image[idx] = get_color<0>(spheres, sphere_count, lights, light_count, camera_pos, ray_dir);
+    image[idx] = get_color(spheres, sphere_count, lights, light_count, camera_pos, ray_dir);
 }
 
 void raytrace_spheres(Sphere* spheres, size_t sphere_count, Light* lights, size_t light_count, int* visible, CU_Vector3f* vertices, CU_Vector3f* normals, CU_Vector3f* image, Camera* camera) {

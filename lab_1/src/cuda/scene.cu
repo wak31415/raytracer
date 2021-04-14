@@ -1,6 +1,7 @@
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <stdio.h>
+#include <string>
 
 #include "cuda/scene.cuh"
 
@@ -81,14 +82,31 @@ void Scene::load_scene(std::string filepath) {
                         jf["spheres"][i]["pos"][1],
                         jf["spheres"][i]["pos"][2]);
 
-        CU_Vector3f color(jf["spheres"][i]["color"][0],
-                          jf["spheres"][i]["color"][1],
-                          jf["spheres"][i]["color"][2]);
+        std::string mat = jf["spheres"][i]["material"];
+
+        CU_Vector3f color;
+        uint material = DIFFUSE;
+        float ri(0.f);
+        float ro(0.f);
+
+        if(mat == "diffuse") {
+            material = DIFFUSE;
+            color[0] = jf["spheres"][i]["color"][0];
+            color[1] = jf["spheres"][i]["color"][1];
+            color[2] = jf["spheres"][i]["color"][2];
+        }
+        else if (mat == "mirror") {
+            material = MIRROR;
+        } 
+        else if (mat == "glass") {
+            material = GLASS;
+            ro = jf["spheres"][i]["refractive_index"][0];
+            ri = jf["spheres"][i]["refractive_index"][1];
+        }
 
         float R = jf["spheres"][i]["radius"];
-        float spec = jf["spheres"][i]["specularity"];
 
-        add_sphere(pos, R, color, spec);
+        add_sphere(pos, R, color, material, ro, ri);
     }
 
     // Add lights
@@ -186,12 +204,14 @@ void Scene::transform_camera(CU_Vector3f direction) {
     camera->E[2*4 + 3] += direction[2];
 }
 
-void Scene::add_sphere(CU_Vector3f pos, float radius, CU_Vector3f color, float specularity) {
+void Scene::add_sphere(CU_Vector3f pos, float radius, CU_Vector3f color, uint material, float ro, float ri) {
     Sphere s;
     s.pos = pos;
     s.radius = radius;
     s.color = color;
-    s.specularity = specularity;
+    s.material = material;
+    s.ro = ro;
+    s.ri = ri;
     spheres.push_back(s);
 }
 

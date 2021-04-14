@@ -21,7 +21,7 @@ class Scene {
         void transform_camera(float x, float y, float z);
         void transform_camera(CU_Vector3f direction);
 
-        void add_sphere(CU_Vector3f pos, float radius, CU_Vector3f color, float specularity);
+        void add_sphere(CU_Vector3f pos, float radius, CU_Vector3f color, uint material, float ro, float ri);
         void add_light(CU_Vector3f pos, float intensity);
         
         std::vector<Sphere> get_spheres();
