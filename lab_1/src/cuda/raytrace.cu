@@ -99,7 +99,7 @@ __device__ CU_Vector3f get_color(Sphere* spheres,
                 float N_wi_dot = max(dot(N, w_i), 0.f);
 
                 // check if the light is visible from P
-                bool P_visible = is_visible(spheres, sphere_count, P+0.001*N, lights[0].pos);
+                bool P_visible = is_visible(spheres, sphere_count, P+0.01*N, lights[0].pos);
 
                 CU_Vector3f L = lights[0].I / (4*PI*PI*d*d) * sphere_color * P_visible * N_wi_dot;
 
@@ -211,6 +211,7 @@ __global__ void raytrace_spheres_kernel(Sphere* spheres,
     for(int i = 0; i < num_rays; i++) {
         color += get_color(spheres, sphere_count, lights, light_count, camera_pos, ray_dir, &terminate_early, i*idx);
         actual_rays += 1;
+        if(terminate_early) break;
     }
     image[idx] = gamma_correct((1.f/actual_rays) * color);
 }
