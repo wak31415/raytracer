@@ -18,10 +18,7 @@ using json = nlohmann::json;
 void raytrace_spheres(Sphere* spheres, 
                       size_t sphere_count, 
                       Light* lights, 
-                      size_t light_count, 
-                      int* visible, 
-                      CU_Vector3f* vertices, 
-                      CU_Vector3f* normals, 
+                      size_t light_count,
                       CU_Vector3f* image, 
                       Camera* camera
 );
@@ -34,17 +31,11 @@ Scene::Scene() {
     set_camera_intrinsics(60.f, 512, 512);
 
     size_t vertex_count = this->camera->width * this->camera->height;
-    visible = (int*)malloc(vertex_count*sizeof(int));
-    vertices = (CU_Vector3f*)malloc(vertex_count*sizeof(CU_Vector3f));
-    normals = (CU_Vector3f*)malloc(vertex_count*sizeof(CU_Vector3f));
     image = (CU_Vector3f*)malloc(vertex_count*sizeof(CU_Vector3f));
 }
 
 Scene::~Scene() {
     free(camera);
-    free(visible);
-    free(vertices);
-    free(normals);
     free(image);
 }
 
@@ -119,14 +110,11 @@ void Scene::load_scene(std::string filepath) {
     }
 
     size_t vertex_count = this->camera->width * this->camera->height;
-    visible = (int*)realloc(visible, vertex_count*sizeof(int));
-    vertices = (CU_Vector3f*)realloc(vertices, vertex_count*sizeof(CU_Vector3f));
-    normals = (CU_Vector3f*)realloc(normals, vertex_count*sizeof(CU_Vector3f));
     image = (CU_Vector3f*)realloc(image, vertex_count*sizeof(CU_Vector3f));
 }
 
 void Scene::render() {
-    raytrace_spheres(&spheres[0], spheres.size(), &lights[0], lights.size(), visible, vertices, normals, image, camera);
+    raytrace_spheres(&spheres[0], spheres.size(), &lights[0], lights.size(), image, camera);
 
     size_t num_pixels = camera->width*camera->height;
 

@@ -179,9 +179,6 @@ __global__ void raytrace_spheres_kernel(Sphere* spheres,
                                         size_t sphere_count, 
                                         Light* lights,
                                         size_t light_count,
-                                        int* visible, 
-                                        CU_Vector3f* vertices, 
-                                        CU_Vector3f* normals,
                                         CU_Vector3f* image, 
                                         CU_Matrix<3> cam_rot,
                                         CU_Vector3f camera_pos,
@@ -216,7 +213,7 @@ __global__ void raytrace_spheres_kernel(Sphere* spheres,
     image[idx] = gamma_correct((1.f/actual_rays) * color);
 }
 
-void raytrace_spheres(Sphere* spheres, size_t sphere_count, Light* lights, size_t light_count, int* visible, CU_Vector3f* vertices, CU_Vector3f* normals, CU_Vector3f* image, Camera* camera) {
+void raytrace_spheres(Sphere* spheres, size_t sphere_count, Light* lights, size_t light_count, CU_Vector3f* image, Camera* camera) {
     size_t vertex_count = camera->width * camera->height;
 
     Sphere* d_spheres;
@@ -224,31 +221,19 @@ void raytrace_spheres(Sphere* spheres, size_t sphere_count, Light* lights, size_
     CU_Matrix<4> d_cam_rot;
     CU_Vector3f d_cam_trans;
     CU_Matrix<3> d_K;
-    int* d_visible;
     CU_Vector3f* d_image;
-    CU_Vector3f* d_vertices;
-    CU_Vector3f* d_normals;
 
     CU_Matrix<3> cam_rot = camera->E.get_rotation();
     CU_Vector3f cam_trans = camera->E.get_translation();
 
     cudaMalloc((void**)&d_spheres, sphere_count*sizeof(struct Sphere));
     cudaMalloc((void**)&d_lights, light_count*sizeof(struct Light));
-    // cudaMalloc((void**)&d_cam_rot, sizeof(CU_Matrix<3>));
-    // cudaMalloc((void**)&d_cam_trans, sizeof(CU_Vector3f));
-    // cudaMalloc((void**)&d_K, sizeof(CU_Matrix<3>));
-    cudaMalloc((void**)&d_visible, vertex_count*sizeof(int));
     cudaMalloc((void**)&d_image, vertex_count*sizeof(CU_Vector3f));
-    cudaMalloc((void**)&d_vertices, vertex_count*sizeof(CU_Vector3f));
-    cudaMalloc((void**)&d_normals, vertex_count*sizeof(CU_Vector3f));
 
     cudaMemcpy(d_spheres, spheres, sphere_count*sizeof(struct Sphere), cudaMemcpyHostToDevice);
     cudaMemcpy(d_lights, lights, light_count*sizeof(struct Light), cudaMemcpyHostToDevice);
-    // cudaMemcpy(d_cam_rot, cam_rot, sizeof(CU_Matrix<3>), cudaMemcpyHostToDevice);
-    // cudaMemcpy(d_cam_trans, cam_trans, sizeof(CU_Vector3f), cudaMemcpyHostToDevice);
-    // cudaMemcpy(d_K, camera-K, sizeof(CU_Matrix<3>), cudaMemcpyHostToDevice);
 
-    dim3 threadsPerBlock(32,32);
+    dim3 threadsPerBlock(8, 16);
     dim3 blocksPerGrid((camera->width + threadsPerBlock.x - 1) / threadsPerBlock.x,
                        (camera->height + threadsPerBlock.y - 1) / threadsPerBlock.y);
     
@@ -257,9 +242,6 @@ void raytrace_spheres(Sphere* spheres, size_t sphere_count, Light* lights, size_
         sphere_count,
         d_lights,
         light_count,
-        d_visible,
-        d_vertices,
-        d_normals,
         d_image,
         cam_rot,
         cam_trans,
@@ -270,18 +252,9 @@ void raytrace_spheres(Sphere* spheres, size_t sphere_count, Light* lights, size_
     );
     cudaDeviceSynchronize();
 
-    cudaMemcpy(visible, d_visible, vertex_count*sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(image, d_image, vertex_count*sizeof(CU_Vector3f), cudaMemcpyDeviceToHost);
-    cudaMemcpy(vertices, d_vertices, vertex_count*sizeof(CU_Vector3f), cudaMemcpyDeviceToHost);
-    cudaMemcpy(normals, d_normals, vertex_count*sizeof(CU_Vector3f), cudaMemcpyDeviceToHost);
 
     cudaFree(d_spheres);
     cudaFree(d_lights);
-    // cudaFree(d_cam_rot);
-    // cudaFree(d_cam_trans);
-    // cudaFree(d_K);
-    cudaFree(d_visible);
     cudaFree(d_image);
-    cudaFree(d_vertices);
-    cudaFree(d_normals);
 }

@@ -33,9 +33,6 @@ class Scene {
         std::vector<Sphere> spheres;
         std::vector<Light> lights;
         Camera* camera;
-        int* visible;
-        CU_Vector3f* vertices;
-        CU_Vector3f* normals;
         CU_Vector3f* image;
 };
 
