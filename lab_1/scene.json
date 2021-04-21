@@ -3,8 +3,8 @@
         {
             "pos": [-20, 0, 0],
             "radius" : 10,
-            "color" : [0.5, 0.5, 0.5],
-            "material" : "mirror"
+            "color" : [1, 1, 1],
+            "material" : "diffuse"
         },
         {
             "pos": [0, 0, 0],
@@ -22,7 +22,7 @@
         },
         {
             "pos": [20, 0, 0],
-            "radius" : 9.5,
+            "radius" : 9.2,
             "color" : [0.5, 0.5, 0.5],
             "material" : "glass",
             "refractive_index" : [1.5, 1]
@@ -66,8 +66,8 @@
     ],
     "lights" : [
         {
-            "pos": [-20, 20, 30],
-            "intensity": 20000000000
+            "pos": [-10, 20, 40],
+            "intensity": 10000000000
         }
     ],
     "camera" : {
@@ -76,6 +76,6 @@
         "width": 512,
         "height": 512,
         "fov": 60,
-        "num_rays" : 100
+        "num_rays" : 1000
     }
 }

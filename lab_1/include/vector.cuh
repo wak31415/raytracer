@@ -47,10 +47,39 @@ class CU_Vector {
             return *this;
         }
 
+        __host__ __device__ CU_Vector& operator*=(const CU_Vector& b) {
+            for(int i=0; i<N; i++) {
+                data[i] *= b[i];
+            }
+            return *this;
+        }
+
         template <class T>
         __host__ __device__ CU_Vector& operator/=(const T& scalar) {
             this *= 1.f/scalar;
             return *this;
+        }
+
+        __host__ __device__ float min() {
+            float _min = data[0];
+            for (size_t i = 0; i < N; i++)
+            {
+                if(data[i] < _min) _min = data[i];
+            }
+            return _min; 
+        }
+
+        __host__ __device__ unsigned int argmin_abs() {
+            float _min = data[0];
+            unsigned int _arg = 0;
+            for (size_t i = 0; i < N; i++)
+            {
+                if(abs(data[i]) < _min) {
+                    _min = abs(data[i]);
+                    _arg = i;
+                }
+            }
+            return _arg;
         }
 
         __host__ __device__ float norm() {
@@ -67,6 +96,15 @@ class CU_Vector {
             for (int i = 0; i < N; i++)
                 data[i] /= _norm;
         }
+
+        __host__ __device__ CU_Vector cross(const CU_Vector<3> &other) {
+            // if (N!=3) { return CU_Vector(); }
+            CU_Vector<3> cross_prod;
+            cross_prod[0] = data[1]*other[2] - data[2]*other[1];
+            cross_prod[1] = data[2]*other[0] - data[0]*other[2];
+            cross_prod[2] = data[0]*other[1] - data[1]*other[0];
+            return cross_prod;
+        };
 
     protected:
         int N;
@@ -109,6 +147,15 @@ __host__ __device__ CU_Vector<VecSize> operator*(const CU_Vector<VecSize> &v, co
     return scalar * v;
 };
 
+// element-wise multiplication
+template <size_t VecSize>
+__host__ __device__ CU_Vector<VecSize> operator*(const CU_Vector<VecSize> &a, const CU_Vector<VecSize> &b) {
+    float data[VecSize];
+    for (int i = 0; i < VecSize; i++)
+        data[i] = a[i] * b[i];
+    
+    return CU_Vector<VecSize>(data);
+};
 
 // Define dot and cross products
 template <size_t VecSize>

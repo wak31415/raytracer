@@ -2,7 +2,7 @@
 #include <fstream>
 #include <stdio.h>
 #include <iostream>
-#include "cuda/scene.cuh"
+#include "scene.cuh"
 
 int main() {
     Scene main_scene;

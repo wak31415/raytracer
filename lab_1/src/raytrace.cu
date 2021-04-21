@@ -1,12 +1,27 @@
-#include "cuda/scene_objects.cuh"
-#include "cuda/projection_helpers.cuh"
+#include "scene_objects.cuh"
+#include "projection_helpers.cuh"
 #include <curand.h>
 #include <curand_kernel.h>
 #include <stdio.h>
 
-#define PI 3.14159265358979
 #define GAMMA 2.2
 #define MAX_RAY_DEPTH 5
+
+#define INDIRECT_LIGHTING 1
+
+__global__ void initialize_states(unsigned int seed, size_t width, curandState_t* states) {
+    uint u_x = blockDim.x * blockIdx.x + threadIdx.x;
+    uint u_y = blockDim.y * blockIdx.y + threadIdx.y;
+
+    uint idx = u_y * width + u_x;
+
+    /* we have to initialize the state */
+    curand_init(seed, /* the seed can be the same for each core, here we pass the time in from the CPU */
+                idx, /* the sequence number should be different for each core (unless you want all
+                               cores to get the same sequence of numbers for some reason - use thread id! */
+                0, /* the offset is how much extra we advance in the sequence for each call, can be 0 */
+                &states[idx]);
+}
 
 __device__ CU_Vector3f gamma_correct(CU_Vector3f color) {
     CU_Vector3f res;
@@ -19,7 +34,7 @@ __device__ CU_Vector3f gamma_correct(CU_Vector3f color) {
 
 __device__ CU_Vector3f get_intersection(Sphere* spheres, 
                                         size_t sphere_count, 
-                                        CU_Vector3f ray, 
+                                        CU_Vector3f ray,
                                         CU_Vector3f start, 
                                         int* intersect_id) 
 {
@@ -29,7 +44,8 @@ __device__ CU_Vector3f get_intersection(Sphere* spheres,
         CU_Vector3f O_C = start - spheres[i].pos;
 
         float ray_dot_O_C = dot(ray, O_C);
-        float delta = powf(ray_dot_O_C, 2.f) - powf(O_C.norm(), 2.f) + powf(spheres[i].radius, 2.f);
+        float O_C_norm = O_C.norm();
+        float delta = ray_dot_O_C*ray_dot_O_C - O_C_norm*O_C_norm + spheres[i].radius*spheres[i].radius;
 
         if (delta >= 0) {
             float t;
@@ -63,6 +79,36 @@ __device__ CU_Vector3f reflected_direction(CU_Vector3f ray, CU_Vector3f normal) 
     return ray - 2 * dot(ray, normal) * normal;
 }
 
+/**
+ * Generates a random ray for indirect lighting
+ **/
+__device__ CU_Vector3f random_cos(curandState_t* states, CU_Vector3f normal, unsigned int idx) {
+    float r1 = curand_uniform(&states[idx]);
+    float r2 = curand_uniform(&states[idx]);
+
+    float x = cosf(2*M_PI*r1)*sqrtf(1-r2);
+    float y = sinf(2*M_PI*r1)*sqrtf(1-r2);
+    float z = sqrtf(r2);
+
+    // generate orthogonal vectors T1 and T2
+    int k = normal.argmin_abs(); 
+    int i = (int)fmod(k + 1.f, 3.f);
+    int j = (int)fmod(k + 2.f, 3.f);
+
+    // T1
+    CU_Vector3f T1;
+    T1[i] = normal[j];
+    T1[j] = -normal[i];
+    T1[k] = 0.f;
+    T1.normalize();
+
+    // T2
+    CU_Vector3f T2 = normal.cross(T1);
+    T2.normalize();
+
+    return x*T1 + y*T2 + z*normal;
+}
+
 __device__ CU_Vector3f get_color(Sphere* spheres, 
                                  size_t sphere_count, 
                                  Light* lights,
@@ -70,9 +116,13 @@ __device__ CU_Vector3f get_color(Sphere* spheres,
                                  CU_Vector3f start, 
                                  CU_Vector3f ray,
                                  bool* terminate_early,
-                                 uint seed) 
+                                 curandState_t* states,
+                                 unsigned int idx)
 {
     int depth = 0;
+    CU_Vector3f L;
+    CU_Vector3f albedo(1.f, 1.f, 1.f);
+
     while(depth < MAX_RAY_DEPTH) {
         // if(depth >= MAX_RAY_DEPTH) return CU_Vector3f();
         int intersect_id = -1;
@@ -89,7 +139,9 @@ __device__ CU_Vector3f get_color(Sphere* spheres,
             // Diffuse
             if(material == DIFFUSE) {
                 // First surface we reach is diffuse, single ray is sufficient
-                if(depth == 0) *terminate_early = true;
+                if(!INDIRECT_LIGHTING) {
+                    if(depth == 0) *terminate_early = true;
+                }
 
                 // Normalized vector point --> light
                 CU_Vector3f S_P = lights[0].pos - P;
@@ -101,15 +153,22 @@ __device__ CU_Vector3f get_color(Sphere* spheres,
                 // check if the light is visible from P
                 bool P_visible = is_visible(spheres, sphere_count, P+0.01*N, lights[0].pos);
 
-                CU_Vector3f L = lights[0].I / (4*PI*PI*d*d) * sphere_color * P_visible * N_wi_dot;
+                CU_Vector3f direct = lights[0].I / (4*M_PI*M_PI*d*d) * sphere_color * P_visible * N_wi_dot;
+                
+                L += albedo * direct;
 
-                return L;
+                if(!INDIRECT_LIGHTING) return L;
+
+                albedo *= sphere_color;
+
+                start = P + 0.01*N;
+                ray = random_cos(states, N, idx);
             }
 
             // Mirror
             else if(material == MIRROR) {
                 CU_Vector3f reflected_ray = reflected_direction(ray, N);
-                start = P+0.01*N;
+                start = P + 0.01*N;
                 ray = reflected_ray;
             }
 
@@ -125,9 +184,7 @@ __device__ CU_Vector3f get_color(Sphere* spheres,
                 float R = k0 + (1.f-k0)*powf(1-abs(wi_N_dot), 5.f);
 
                 // generate random numer
-                curandState_t state;
-                curand_init(seed, 0, 0, &state);
-                float r = curand_uniform(&state);
+                float r = curand_uniform(&states[idx]);
 
                 if(r < R) {
                     CU_Vector3f reflected_ray = reflected_direction(ray, N);
@@ -166,13 +223,13 @@ __device__ CU_Vector3f get_color(Sphere* spheres,
                     }
                 }
             }
-            depth = depth + 1;
         }
         else {
-            return CU_Vector3f();
+            return L;
         }
+        depth = depth + 1;
     }
-    return CU_Vector3f();
+    return L;
 }
 
 __global__ void raytrace_spheres_kernel(Sphere* spheres, 
@@ -185,7 +242,8 @@ __global__ void raytrace_spheres_kernel(Sphere* spheres,
                                         CU_Matrix<3> K,
                                         uint width,
                                         uint height,
-                                        uint num_rays) 
+                                        uint num_rays,
+                                        curandState_t* states) 
 {
     uint u_x = blockDim.x * blockIdx.x + threadIdx.x;
     uint u_y = blockDim.y * blockIdx.y + threadIdx.y;
@@ -206,7 +264,7 @@ __global__ void raytrace_spheres_kernel(Sphere* spheres,
     int actual_rays = 0;
     // image[idx] = get_color(spheres, sphere_count, lights, light_count, camera_pos, ray_dir, &terminate_early, idx);
     for(int i = 0; i < num_rays; i++) {
-        color += get_color(spheres, sphere_count, lights, light_count, camera_pos, ray_dir, &terminate_early, i*idx);
+        color += get_color(spheres, sphere_count, lights, light_count, camera_pos, ray_dir, &terminate_early, states, idx);
         actual_rays += 1;
         if(terminate_early) break;
     }
@@ -216,6 +274,8 @@ __global__ void raytrace_spheres_kernel(Sphere* spheres,
 void raytrace_spheres(Sphere* spheres, size_t sphere_count, Light* lights, size_t light_count, CU_Vector3f* image, Camera* camera) {
     size_t vertex_count = camera->width * camera->height;
 
+
+    curandState_t* d_states;
     Sphere* d_spheres;
     Light* d_lights;
     CU_Matrix<4> d_cam_rot;
@@ -226,6 +286,7 @@ void raytrace_spheres(Sphere* spheres, size_t sphere_count, Light* lights, size_
     CU_Matrix<3> cam_rot = camera->E.get_rotation();
     CU_Vector3f cam_trans = camera->E.get_translation();
 
+    cudaMalloc((void**)&d_states, vertex_count*sizeof(curandState_t));
     cudaMalloc((void**)&d_spheres, sphere_count*sizeof(struct Sphere));
     cudaMalloc((void**)&d_lights, light_count*sizeof(struct Light));
     cudaMalloc((void**)&d_image, vertex_count*sizeof(CU_Vector3f));
@@ -236,6 +297,8 @@ void raytrace_spheres(Sphere* spheres, size_t sphere_count, Light* lights, size_
     dim3 threadsPerBlock(8, 16);
     dim3 blocksPerGrid((camera->width + threadsPerBlock.x - 1) / threadsPerBlock.x,
                        (camera->height + threadsPerBlock.y - 1) / threadsPerBlock.y);
+
+    initialize_states<<<blocksPerGrid, threadsPerBlock>>>(time(0), camera->width, d_states);
     
     raytrace_spheres_kernel<<<blocksPerGrid, threadsPerBlock>>>(
         d_spheres,
@@ -248,7 +311,8 @@ void raytrace_spheres(Sphere* spheres, size_t sphere_count, Light* lights, size_
         camera->K,
         camera->width,
         camera->height,
-        camera->num_rays
+        camera->num_rays,
+        d_states
     );
     cudaDeviceSynchronize();
 

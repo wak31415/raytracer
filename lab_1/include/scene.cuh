@@ -3,7 +3,7 @@
 
 #include <vector>
 #include <string>
-#include "cuda/scene_objects.cuh"
+#include "scene_objects.cuh"
 
 class Scene {
     public:

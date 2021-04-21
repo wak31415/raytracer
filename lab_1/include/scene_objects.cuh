@@ -1,5 +1,5 @@
-#include "cuda/vector.cuh"
-#include "cuda/matrix.cuh"
+#include "vector.cuh"
+#include "matrix.cuh"
 
 enum materials {
     DIFFUSE = 0,

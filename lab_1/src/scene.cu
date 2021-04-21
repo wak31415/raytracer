@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string>
 
-#include "cuda/scene.cuh"
+#include "scene.cuh"
 
 #define PI 3.14159265358979
 
