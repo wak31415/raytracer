@@ -4,8 +4,8 @@ project(lab_1 LANGUAGES CXX CUDA)
 find_package(nlohmann_json 3.2.0 REQUIRED)
 
 add_library(scene SHARED
-    src/cuda/raytrace.cu
-    src/cuda/scene.cu
+    src/raytrace.cu
+    src/scene.cu
 )
 
 #include_directories(include)
@@ -25,3 +25,6 @@ set_target_properties(lab_1 PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 
 set_property(TARGET scene PROPERTY CUDA_ARCHITECTURES 61)
 set_property(TARGET lab_1 PROPERTY CUDA_ARCHITECTURES 61)
+
+add_executable(integration test/integrate.cu)
+set_property(TARGET integration PROPERTY CUDA_ARCHITECTURES 61)
