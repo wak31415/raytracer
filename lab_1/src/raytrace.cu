@@ -1,8 +1,11 @@
 #include "scene_objects.cuh"
 #include "projection_helpers.cuh"
+#include <iostream>
+#include <string>
 #include <curand.h>
 #include <curand_kernel.h>
 #include <stdio.h>
+#include <ctime>
 
 #define GAMMA 2.2
 #define MAX_RAY_DEPTH 5
@@ -252,7 +255,8 @@ __global__ void raytrace_spheres_kernel(Sphere* spheres,
                                         uint width,
                                         uint height,
                                         uint num_rays,
-                                        curandState_t* states) 
+                                        curandState_t* states,
+                                        volatile int* progress) 
 {
     uint u_x = blockDim.x * blockIdx.x + threadIdx.x;
     uint u_y = blockDim.y * blockIdx.y + threadIdx.y;
@@ -262,35 +266,36 @@ __global__ void raytrace_spheres_kernel(Sphere* spheres,
     if (u_x >= width || u_y >= height) 
         return;
 
-    // obtain ray direction
-
     bool terminate_early = false;
     CU_Vector3f color(0.f, 0.f, 0.f);
-    // uint i = 0;
-    int actual_rays = 0;
-    // image[idx] = get_color(spheres, sphere_count, lights, light_count, camera_pos, ray_dir, &terminate_early, idx);
+
     for(int i = 0; i < num_rays; i++) {
         float dx=1.f, dy=1.f;
 
+        // randomizing ray direction for anti-aliasing
         while(abs(dx) > 0.5f || abs(dy) > 0.5f)
             boxMueller(states, idx, 1.f, &dx, &dy);
 
         if(abs(dx) <= 0.5f && abs(dy) <= 0.5f) {
+            // obtain ray direction
             CU_Vector3f ray_dir = pixel_to_camera(u_x+0.5f+dx, u_y+0.5f+dx, 1.f, K);
             ray_dir.normalize();
             ray_dir = cam_rot*ray_dir;
 
             color += get_color(spheres, sphere_count, lights, light_count, camera_pos, ray_dir, &terminate_early, states, idx);
-            actual_rays += 1;
-            // if(terminate_early) break;
         }
     }
-    image[idx] = gamma_correct((1.f/actual_rays) * color);
+    image[idx] = gamma_correct((1.f/num_rays) * color);
+
+    // Update progress
+    if (!(threadIdx.x || threadIdx.y)){
+        atomicAdd((int *)progress, 1);
+        __threadfence_system();
+    }
 }
 
 void raytrace_spheres(Sphere* spheres, size_t sphere_count, Light* lights, size_t light_count, CU_Vector3f* image, Camera* camera) {
     size_t vertex_count = camera->width * camera->height;
-
 
     curandState_t* d_states;
     Sphere* d_spheres;
@@ -315,6 +320,19 @@ void raytrace_spheres(Sphere* spheres, size_t sphere_count, Light* lights, size_
     dim3 blocksPerGrid((camera->width + threadsPerBlock.x - 1) / threadsPerBlock.x,
                        (camera->height + threadsPerBlock.y - 1) / threadsPerBlock.y);
 
+    volatile int *d_data, *h_data;
+    cudaSetDeviceFlags(cudaDeviceMapHost);
+    cudaHostAlloc((void **)&h_data, sizeof(int), cudaHostAllocMapped);
+    cudaHostGetDevicePointer((int **)&d_data, (int *)h_data, 0);
+    *h_data = 0;
+
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start); cudaEventCreate(&stop);
+
+    cudaEventRecord(start);
+
+    clock_t t = std::clock();
+
     initialize_states<<<blocksPerGrid, threadsPerBlock>>>(time(0), camera->width, d_states);
     
     raytrace_spheres_kernel<<<blocksPerGrid, threadsPerBlock>>>(
@@ -329,9 +347,44 @@ void raytrace_spheres(Sphere* spheres, size_t sphere_count, Light* lights, size_
         camera->width,
         camera->height,
         camera->num_rays,
-        d_states
+        d_states,
+        d_data
     );
+    cudaEventRecord(stop);
+
+    unsigned int num_blocks = blocksPerGrid.x*blocksPerGrid.y;
+    float my_progress = 0.0f;
+    do{
+        cudaEventQuery(stop);  // may help WDDM scenario
+        int value1 = *h_data;
+        float kern_progress = (float)value1/(float)num_blocks;
+        if ((kern_progress - my_progress)> 0.02f) {
+            float time_passed = (float)(std::clock() - t)/static_cast<float>(CLOCKS_PER_SEC);
+            float eta = time_passed / kern_progress - time_passed;
+            std::cout << "\rProgress: [";
+            for(size_t i = 0; i < 20; i++) {
+                if(i/20.f < my_progress) {
+                    std::cout << "#";
+                } else {
+                    std::cout << " ";
+                }
+            }
+            char s[10];
+            memset((void*)s, 0, 10*sizeof(char));
+            std::snprintf(s, 10*sizeof(char), "%.2f", eta);
+            std::cout << "] - "<< static_cast<int>(kern_progress*100) << "% \t Remaining: " << (char*)s << "s" << std::flush;
+            // fflush(stdout);
+            my_progress = kern_progress;
+        }
+    }
+    while (my_progress < 0.98f);
+    printf("\n");
+
+    cudaEventSynchronize(stop);
+    float et;
+    cudaEventElapsedTime(&et, start, stop);
     cudaDeviceSynchronize();
+    printf("Finished raytracing in %.3f seconds.\n", (double)(std::clock() - t)/CLOCKS_PER_SEC);//et/1000.f);
 
     cudaMemcpy(image, d_image, vertex_count*sizeof(CU_Vector3f), cudaMemcpyDeviceToHost);
 

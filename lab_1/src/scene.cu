@@ -138,7 +138,7 @@ void Scene::set_camera_intrinsics(float fov, size_t width, size_t height) {
     // f_x = f*w/W
     // f_y = f*h/H
     camera->K[0*3 + 0] = width / (2*tanf(PI * fov / 360.f));    // f_x
-    camera->K[1*3 + 1] = height / (2*tanf(PI * fov / 360.f));    // f_y
+    camera->K[1*3 + 1] = width / (2*tanf(PI * fov / 360.f));    // f_y
     camera->K[2*3 + 2] = 1.f;                                   // 1
 
     camera->K[0*3 + 2] = width / 2;     // c_x
