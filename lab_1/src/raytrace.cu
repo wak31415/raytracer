@@ -270,8 +270,10 @@ __global__ void raytrace_spheres_kernel(Sphere* spheres,
     int actual_rays = 0;
     // image[idx] = get_color(spheres, sphere_count, lights, light_count, camera_pos, ray_dir, &terminate_early, idx);
     for(int i = 0; i < num_rays; i++) {
-        float dx=0.f, dy=0.f;
-        boxMueller(states, idx, 1.f, &dx, &dy);
+        float dx=1.f, dy=1.f;
+
+        while(abs(dx) > 0.5f || abs(dy) > 0.5f)
+            boxMueller(states, idx, 1.f, &dx, &dy);
 
         if(abs(dx) <= 0.5f && abs(dy) <= 0.5f) {
             CU_Vector3f ray_dir = pixel_to_camera(u_x+0.5f+dx, u_y+0.5f+dx, 1.f, K);
