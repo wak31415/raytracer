@@ -66,7 +66,7 @@ __host__ __device__ CU_Vector<2> world_to_pixel(CU_Vector<VecSize> p_world,
 * @param depth      depth value (from camera)
 * @param K          Camera intrinsic matrix
 **/
-__host__ __device__ CU_Vector3f pixel_to_camera(uint u_x, uint u_y, float depth, CU_Matrix<3> K)
+__host__ __device__ CU_Vector3f pixel_to_camera(float u_x, float u_y, float depth, CU_Matrix<3> K)
 {
     // p_camera = K_inv * p_img
     const float x = (u_x - K[0*3 + 2]) / K[0*3 + 0];

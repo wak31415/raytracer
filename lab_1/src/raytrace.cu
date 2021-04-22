@@ -23,6 +23,15 @@ __global__ void initialize_states(unsigned int seed, size_t width, curandState_t
                 &states[idx]);
 }
 
+/* Get two independent normally distributed samples, store in x and y */
+__device__ void boxMueller(curandState_t* states, unsigned int idx, float std, float* x, float* y) {
+    float r1 = curand_uniform(&states[idx]);
+    float r2 = curand_uniform(&states[idx]);
+
+    *x = sqrt(-2 * log(r1)) * cos(2 * M_PI * r2) * std;
+    *y = sqrt(-2 * log(r1)) * sin(2 * M_PI * r2) * std;
+}
+
 __device__ CU_Vector3f gamma_correct(CU_Vector3f color) {
     CU_Vector3f res;
     float exponent = 1.f/GAMMA;
@@ -254,9 +263,6 @@ __global__ void raytrace_spheres_kernel(Sphere* spheres,
         return;
 
     // obtain ray direction
-    CU_Vector3f ray_dir = pixel_to_camera(u_x, u_y, 1.f, K);
-    ray_dir.normalize();
-    ray_dir = cam_rot*ray_dir;
 
     bool terminate_early = false;
     CU_Vector3f color(0.f, 0.f, 0.f);
@@ -264,9 +270,18 @@ __global__ void raytrace_spheres_kernel(Sphere* spheres,
     int actual_rays = 0;
     // image[idx] = get_color(spheres, sphere_count, lights, light_count, camera_pos, ray_dir, &terminate_early, idx);
     for(int i = 0; i < num_rays; i++) {
-        color += get_color(spheres, sphere_count, lights, light_count, camera_pos, ray_dir, &terminate_early, states, idx);
-        actual_rays += 1;
-        if(terminate_early) break;
+        float dx=0.f, dy=0.f;
+        boxMueller(states, idx, 1.f, &dx, &dy);
+
+        if(abs(dx) <= 0.5f && abs(dy) <= 0.5f) {
+            CU_Vector3f ray_dir = pixel_to_camera(u_x+0.5f+dx, u_y+0.5f+dx, 1.f, K);
+            ray_dir.normalize();
+            ray_dir = cam_rot*ray_dir;
+
+            color += get_color(spheres, sphere_count, lights, light_count, camera_pos, ray_dir, &terminate_early, states, idx);
+            actual_rays += 1;
+            // if(terminate_early) break;
+        }
     }
     image[idx] = gamma_correct((1.f/actual_rays) * color);
 }
