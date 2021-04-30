@@ -6,6 +6,7 @@
 #include <curand_kernel.h>
 #include <stdio.h>
 #include <ctime>
+#include <math_constants.h>
 
 #define GAMMA 2.2
 #define MAX_RAY_DEPTH 7
@@ -44,20 +45,21 @@ __device__ CU_Vector3f gamma_correct(CU_Vector3f color) {
     return res;
 }
 
-__device__ CU_Vector3f get_intersection(Sphere* spheres, 
-                                        size_t sphere_count, 
-                                        CU_Vector3f ray,
-                                        CU_Vector3f start, 
-                                        int* intersect_id) 
+__device__ float get_distance(Sphere* spheres, 
+                              size_t sphere_count,
+                              CU_Vector3f ray,
+                              CU_Vector3f start,
+                              int* intersect_id)
 {
-    float min_dist = 0.f;
+    float min_dist = CUDART_INF_F;
 
     for(size_t i = 0; i < sphere_count; i++) {
         CU_Vector3f O_C = start - spheres[i].pos;
 
         float ray_dot_O_C = dot(ray, O_C);
         float O_C_norm = O_C.norm();
-        float delta = ray_dot_O_C*ray_dot_O_C - O_C_norm*O_C_norm + spheres[i].radius*spheres[i].radius;
+        float R = spheres[i].radius;
+        float delta = ray_dot_O_C*ray_dot_O_C - O_C_norm*O_C_norm + R*R;
 
         if (delta >= 0) {
             float t;
@@ -74,16 +76,70 @@ __device__ CU_Vector3f get_intersection(Sphere* spheres,
             }
         }
     }
-    if (min_dist == 0.f) return CU_Vector3f();
+    return min_dist;
+}
+
+__device__ float get_distance(Triangle* triangles, 
+                              size_t triangle_count,
+                              CU_Vector3f ray,
+                              CU_Vector3f start, 
+                              int* intersect_id)
+{
+    float min_dist = CUDART_INF_F;
+
+    for(size_t i = 0; i < triangle_count; i++) {
+        Triangle T = triangles[i];
+        CU_Vector3f e1 = T.B - T.A;
+        CU_Vector3f e2 = T.C - T.A;
+        CU_Vector3f A_O_cross_u = (T.A - start).cross(ray);
+        CU_Vector3f N = e1.cross(e2);
+        float rayDotN = dot(ray, N);
+
+        float beta = dot(e2, A_O_cross_u) / rayDotN;
+        float gamma = - dot(e1, A_O_cross_u) / rayDotN;
+
+        float alpha = 1.f - beta - gamma;
+        if (alpha >= 0 && beta >= 0 && gamma >= 0) {
+            float t = dot(T.A - start, T.N) / rayDotN;
+            if (*intersect_id < 0 || t < min_dist) {
+                min_dist = t;
+                *intersect_id = i;
+            }
+        }
+    }
+    return min_dist;
+}
+
+__device__ CU_Vector3f get_intersection(Sphere* spheres, 
+                                        size_t sphere_count,
+                                        Triangle* triangles,
+                                        size_t triangle_count,
+                                        CU_Vector3f ray,
+                                        CU_Vector3f start, 
+                                        int* sphere_id,
+                                        int* triangle_id) 
+{
+    float min_dist = CUDART_INF_F;
+    float min_dist_spheres = get_distance(spheres, sphere_count, ray, start, sphere_id);
+    float min_dist_triangles = get_distance(triangles, triangle_count, ray, start, triangle_id);
+    if(min_dist_spheres < min_dist_triangles) {
+        min_dist = min_dist_spheres;
+        *triangle_id = -1;
+    } else {
+        min_dist = min_dist_triangles;
+        *sphere_id = -1;
+    }
+    if (__isinff(min_dist)) return CU_Vector3f(CUDART_INF_F, CUDART_INF_F, CUDART_INF_F);
     return start + min_dist*ray;
 }
 
-__device__ bool is_visible(Sphere* spheres, size_t sphere_count, CU_Vector3f origin, CU_Vector3f target) {
-    int intersect_id = -1;
+__device__ bool is_visible(Sphere* spheres, size_t sphere_count, Triangle* triangles, size_t triangle_count, CU_Vector3f origin, CU_Vector3f target) {
+    int sphere_id = -1;
+    int triangle_id = -1;
     CU_Vector3f ray = target - origin;
     ray.normalize();
-    CU_Vector3f P = get_intersection(spheres, sphere_count, ray, origin, &intersect_id);
-    if ((P - origin).norm() < (target - origin).norm() && intersect_id >= 0) return false;
+    CU_Vector3f P = get_intersection(spheres, sphere_count, triangles, triangle_count, ray, origin, &sphere_id, &triangle_id);
+    if ((P - origin).norm() < (target - origin).norm()) return false;
     return true;
 }
 
@@ -122,7 +178,9 @@ __device__ CU_Vector3f random_cos(curandState_t* states, CU_Vector3f normal, uns
 }
 
 __device__ CU_Vector3f get_color(Sphere* spheres, 
-                                 size_t sphere_count, 
+                                 size_t sphere_count,
+                                 Triangle* triangles,
+                                 size_t triangle_count, 
                                  Light* lights,
                                  size_t light_count,
                                  CU_Vector3f start, 
@@ -136,16 +194,21 @@ __device__ CU_Vector3f get_color(Sphere* spheres,
     CU_Vector3f albedo(1.f, 1.f, 1.f);
 
     while(depth < MAX_RAY_DEPTH) {
-        int intersect_id = -1;
-        CU_Vector3f P = get_intersection(spheres, sphere_count, ray, start, &intersect_id);
+        int sphere_id = -1;
+        int triangle_id = -1;
+        CU_Vector3f P = get_intersection(spheres, sphere_count, triangles, triangle_count, ray, start, &sphere_id, &triangle_id);
         
-        if(intersect_id >= 0) {
-            
-            Material material = spheres[intersect_id].material;
-            CU_Vector3f sphere_pos = spheres[intersect_id].pos;
-
-            CU_Vector3f N = P - sphere_pos;
-            N.normalize();
+        if(sphere_id >= 0 || triangle_id >= 0) {
+            Material material;
+            CU_Vector3f N;
+            if(sphere_id >= 0) {
+                material = spheres[sphere_id].material;
+                N = P - spheres[sphere_id].pos;
+                N.normalize();
+            } else {
+                material = triangles[triangle_id].material;
+                N = triangles[triangle_id].N;
+            }
 
             // Diffuse
             if(material.type == DIFFUSE) {
@@ -162,7 +225,7 @@ __device__ CU_Vector3f get_color(Sphere* spheres,
                 float N_wi_dot = max(dot(N, w_i), 0.f);
 
                 // check if the light is visible from P
-                bool P_visible = is_visible(spheres, sphere_count, P+0.01*N, lights[0].pos);
+                bool P_visible = is_visible(spheres, sphere_count, triangles, triangle_count, P+0.01*N, lights[0].pos);
 
                 CU_Vector3f direct = lights[0].I / (4*M_PI*M_PI*d*d) * material.color * P_visible * N_wi_dot;
                 
@@ -245,6 +308,8 @@ __device__ CU_Vector3f get_color(Sphere* spheres,
 
 __global__ void raytrace_spheres_kernel(Sphere* spheres, 
                                         size_t sphere_count, 
+                                        Triangle* triangles,
+                                        size_t triangle_count,
                                         Light* lights,
                                         size_t light_count,
                                         CU_Vector3f* image, 
@@ -282,7 +347,7 @@ __global__ void raytrace_spheres_kernel(Sphere* spheres,
             ray_dir.normalize();
             ray_dir = cam_rot*ray_dir;
 
-            color += get_color(spheres, sphere_count, lights, light_count, camera_pos, ray_dir, &terminate_early, states, idx);
+            color += get_color(spheres, sphere_count, triangles, triangle_count, lights, light_count, camera_pos, ray_dir, &terminate_early, states, idx);
         }
     }
     image[idx] = gamma_correct((1.f/num_rays) * color);
@@ -294,11 +359,20 @@ __global__ void raytrace_spheres_kernel(Sphere* spheres,
     }
 }
 
-void raytrace_spheres(Sphere* spheres, size_t sphere_count, Light* lights, size_t light_count, CU_Vector3f* image, Camera* camera) {
+void raytrace_spheres(Sphere* spheres, 
+                      size_t sphere_count, 
+                      Triangle* triangles, 
+                      size_t triangle_count, 
+                      Light* lights, 
+                      size_t light_count, 
+                      CU_Vector3f* image, 
+                      Camera* camera) 
+{
     size_t vertex_count = camera->width * camera->height;
 
     curandState_t* d_states;
     Sphere* d_spheres;
+    Triangle* d_triangles;
     Light* d_lights;
     CU_Matrix<4> d_cam_rot;
     CU_Vector3f d_cam_trans;
@@ -310,10 +384,12 @@ void raytrace_spheres(Sphere* spheres, size_t sphere_count, Light* lights, size_
 
     cudaMalloc((void**)&d_states, vertex_count*sizeof(curandState_t));
     cudaMalloc((void**)&d_spheres, sphere_count*sizeof(Sphere));
+    cudaMalloc((void**)&d_triangles, triangle_count*sizeof(Triangle));
     cudaMalloc((void**)&d_lights, light_count*sizeof(struct Light));
     cudaMalloc((void**)&d_image, vertex_count*sizeof(CU_Vector3f));
 
     cudaMemcpy(d_spheres, spheres, sphere_count*sizeof(Sphere), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_triangles, triangles, triangle_count*sizeof(Triangle), cudaMemcpyHostToDevice);
     cudaMemcpy(d_lights, lights, light_count*sizeof(struct Light), cudaMemcpyHostToDevice);
 
     dim3 threadsPerBlock(8, 16);
@@ -340,6 +416,8 @@ void raytrace_spheres(Sphere* spheres, size_t sphere_count, Light* lights, size_
     raytrace_spheres_kernel<<<blocksPerGrid, threadsPerBlock>>>(
         d_spheres,
         sphere_count,
+        d_triangles,
+        triangle_count,
         d_lights,
         light_count,
         d_image,
@@ -391,6 +469,7 @@ void raytrace_spheres(Sphere* spheres, size_t sphere_count, Light* lights, size_
     cudaMemcpy(image, d_image, vertex_count*sizeof(CU_Vector3f), cudaMemcpyDeviceToHost);
 
     cudaFree(d_spheres);
+    cudaFree(d_triangles);
     cudaFree(d_lights);
     cudaFree(d_image);
 }

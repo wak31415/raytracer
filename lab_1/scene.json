@@ -64,6 +64,17 @@
             "material" : "diffuse"
         }
     ],
+    "objects" : [
+        {
+            "filepath": "assets/cat/cat.obj",
+            "pos": [0, 0, 0],
+            "scale": [1, 1, 1],
+            "rotation": [0, 0, 0],
+            "color" : [0, 0, 1],
+            "material": "diffuse"
+
+        }
+    ],
     "lights" : [
         {
             "pos": [-10, 20, 40],
@@ -76,6 +87,6 @@
         "width": 512,
         "height": 512,
         "fov": 60,
-        "num_rays" : 1000
+        "num_rays" : 100
     }
 }

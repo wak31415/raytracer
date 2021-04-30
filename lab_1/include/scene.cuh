@@ -22,7 +22,7 @@ class Scene {
         void transform_camera(CU_Vector3f direction);
 
         void add_sphere(CU_Vector3f pos, float radius, CU_Vector3f color, material_type type, float ro, float ri);
-        void add_object(std::string obj_path, CU_Vector3f pos, CU_Vector3f scale, CU_Vector3f rotation);
+        void add_object(std::string obj_path, CU_Vector3f pos, CU_Vector3f scale, CU_Vector3f rotation, Material material);
         void add_light(CU_Vector3f pos, float intensity);
         
         std::vector<Sphere> get_spheres();
@@ -32,6 +32,7 @@ class Scene {
 
     private:
         std::vector<Sphere> spheres;
+        std::vector<Triangle> triangles;
         std::vector<Light> lights;
         Camera* camera;
         CU_Vector3f* image;

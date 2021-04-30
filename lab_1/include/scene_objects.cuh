@@ -28,36 +28,16 @@ struct Material {
     float ri; // refractive index inside
 };
 
-class Object {
-    public:
-        Object(Material material);
-
-        __host__ __device__ Material get_material() { return material; };
-        virtual __host__ __device__ CU_Vector3f get_normal(CU_Vector3f P) { return CU_Vector3f(); };
-        virtual __host__ __device__ float get_intersection(CU_Vector3f start, CU_Vector3f ray) { return 0.f; };
-
-    protected:
-        Material material;
+struct Sphere {
+    CU_Vector3f pos;
+    float radius;
+    Material material;
 };
 
-class Sphere {
-    public:
-        Sphere();
-        Sphere(CU_Vector3f pos, float radius, Material type);
-
-        // __host__ __device__ CU_Vector3f get_normal(CU_Vector3f P);
-        // __host__ __device__ CU_Vector3f get_position();
-        // __host__ __device__ float get_radius();
-
-        // __host__ __device__ float get_intersection(CU_Vector3f start, CU_Vector3f ray);
-    
-        CU_Vector3f pos;
-        float radius;
-        Material material;
+struct Triangle {
+    CU_Vector3f A;
+    CU_Vector3f B;
+    CU_Vector3f C;
+    CU_Vector3f N;
+    Material material;
 };
-
-// class Triangle : Object {
-//     public:
-//         Triangle() {};
-//         virtual ~Triangle() {};
-// };

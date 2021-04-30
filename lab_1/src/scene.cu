@@ -17,6 +17,8 @@ using json = nlohmann::json;
 
 void raytrace_spheres(Sphere* spheres, 
                       size_t sphere_count, 
+                      Triangle* triangles,
+                      size_t triangle_count,
                       Light* lights, 
                       size_t light_count,
                       CU_Vector3f* image, 
@@ -116,7 +118,35 @@ void Scene::load_scene(std::string filepath) {
                              jf["objects"][i]["rotation"][1],
                              jf["objects"][i]["rotation"][2]);
 
-        add_object(obj_path, pos, scale, rotation);
+        std::string mat = jf["objects"][i]["material"];
+
+        CU_Vector3f color;
+        material_type mat_type = DIFFUSE;
+        float ri(0.f);
+        float ro(0.f);
+
+        if(mat == "diffuse") {
+            mat_type = DIFFUSE;
+            color[0] = jf["objects"][i]["color"][0];
+            color[1] = jf["objects"][i]["color"][1];
+            color[2] = jf["objects"][i]["color"][2];
+        }
+        else if (mat == "mirror") {
+            mat_type = MIRROR;
+        } 
+        else if (mat == "glass") {
+            mat_type = GLASS;
+            ro = jf["objects"][i]["refractive_index"][0];
+            ri = jf["objects"][i]["refractive_index"][1];
+        }
+
+        Material material;
+        material.type = mat_type;
+        material.color = color;
+        material.ri = ri;
+        material.ro = ro;
+
+        add_object(obj_path, pos, scale, rotation, material);
     }
 
     // Add lights
@@ -133,7 +163,7 @@ void Scene::load_scene(std::string filepath) {
 }
 
 void Scene::render() {
-    raytrace_spheres(&spheres[0], spheres.size(), &lights[0], lights.size(), image, camera);
+    raytrace_spheres(&spheres[0], spheres.size(), &triangles[0], triangles.size(), &lights[0], lights.size(), image, camera);
 
     size_t num_pixels = camera->width*camera->height;
 
@@ -225,13 +255,21 @@ void Scene::add_sphere(CU_Vector3f pos, float radius, CU_Vector3f color, materia
     spheres.push_back(s);
 }
 
-void Scene::add_object(std::string obj_path, CU_Vector3f pos, CU_Vector3f scale, CU_Vector3f rotation) {
+void Scene::add_object(std::string obj_path, CU_Vector3f pos, CU_Vector3f scale, CU_Vector3f rotation, Material material) {
     // TriangleMesh mesh;
     // mesh.readOBJ(obj_path.c_str());
     // Object o;
     // o.pos = pos;
     // o.scale = scale;
     // o.rotation = rotation;
+    Triangle t;
+    t.A = CU_Vector3f(-10, 10.f, 22.f);
+    t.B = CU_Vector3f(-20, 0.f, 30.f);
+    t.C = CU_Vector3f(0.f, 0.f, 30.f);
+    t.N = (t.B - t.A).cross(t.C - t.A);
+    t.N.normalize();
+    t.material = material;
+    triangles.push_back(t);
     return;
 }
 

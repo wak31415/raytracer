@@ -4,7 +4,6 @@ project(lab_1 LANGUAGES CXX CUDA)
 find_package(nlohmann_json 3.2.0 REQUIRED)
 
 add_library(scene SHARED
-    src/scene_objects.cu
     src/raytrace.cu
     src/scene.cu
 )
