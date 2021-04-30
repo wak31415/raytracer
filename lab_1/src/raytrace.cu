@@ -8,7 +8,7 @@
 #include <ctime>
 
 #define GAMMA 2.2
-#define MAX_RAY_DEPTH 5
+#define MAX_RAY_DEPTH 7
 
 #define INDIRECT_LIGHTING 1
 
@@ -136,20 +136,19 @@ __device__ CU_Vector3f get_color(Sphere* spheres,
     CU_Vector3f albedo(1.f, 1.f, 1.f);
 
     while(depth < MAX_RAY_DEPTH) {
-        // if(depth >= MAX_RAY_DEPTH) return CU_Vector3f();
         int intersect_id = -1;
         CU_Vector3f P = get_intersection(spheres, sphere_count, ray, start, &intersect_id);
         
         if(intersect_id >= 0) {
+            
+            Material material = spheres[intersect_id].material;
             CU_Vector3f sphere_pos = spheres[intersect_id].pos;
-            CU_Vector3f sphere_color = spheres[intersect_id].color;
-            int material = spheres[intersect_id].material;
 
-            CU_Vector3f tmp = P - sphere_pos;
-            CU_Vector3f N = (1/tmp.norm()) * tmp;
+            CU_Vector3f N = P - sphere_pos;
+            N.normalize();
 
             // Diffuse
-            if(material == DIFFUSE) {
+            if(material.type == DIFFUSE) {
                 // First surface we reach is diffuse, single ray is sufficient
                 if(!INDIRECT_LIGHTING) {
                     if(depth == 0) *terminate_early = true;
@@ -165,29 +164,29 @@ __device__ CU_Vector3f get_color(Sphere* spheres,
                 // check if the light is visible from P
                 bool P_visible = is_visible(spheres, sphere_count, P+0.01*N, lights[0].pos);
 
-                CU_Vector3f direct = lights[0].I / (4*M_PI*M_PI*d*d) * sphere_color * P_visible * N_wi_dot;
+                CU_Vector3f direct = lights[0].I / (4*M_PI*M_PI*d*d) * material.color * P_visible * N_wi_dot;
                 
                 L += albedo * direct;
 
                 if(!INDIRECT_LIGHTING) return L;
 
-                albedo *= sphere_color;
+                albedo *= material.color;
 
                 start = P + 0.01*N;
                 ray = random_cos(states, N, idx);
             }
 
             // Mirror
-            else if(material == MIRROR) {
+            else if(material.type == MIRROR) {
                 CU_Vector3f reflected_ray = reflected_direction(ray, N);
                 start = P + 0.01*N;
                 ray = reflected_ray;
             }
 
             // Glass 
-            else if(material == GLASS) {
-                float ro = spheres[intersect_id].ro;
-                float ri = spheres[intersect_id].ri;
+            else if(material.type == GLASS) {
+                float ro = material.ro;
+                float ri = material.ri;
 
                 float wi_N_dot = dot(ray, N);
 
@@ -278,6 +277,7 @@ __global__ void raytrace_spheres_kernel(Sphere* spheres,
 
         if(abs(dx) <= 0.5f && abs(dy) <= 0.5f) {
             // obtain ray direction
+            // if(idx==0) printf("Ray %d\n", i);
             CU_Vector3f ray_dir = pixel_to_camera(u_x+0.5f+dx, u_y+0.5f+dx, 1.f, K);
             ray_dir.normalize();
             ray_dir = cam_rot*ray_dir;
@@ -309,11 +309,11 @@ void raytrace_spheres(Sphere* spheres, size_t sphere_count, Light* lights, size_
     CU_Vector3f cam_trans = camera->E.get_translation();
 
     cudaMalloc((void**)&d_states, vertex_count*sizeof(curandState_t));
-    cudaMalloc((void**)&d_spheres, sphere_count*sizeof(struct Sphere));
+    cudaMalloc((void**)&d_spheres, sphere_count*sizeof(Sphere));
     cudaMalloc((void**)&d_lights, light_count*sizeof(struct Light));
     cudaMalloc((void**)&d_image, vertex_count*sizeof(CU_Vector3f));
 
-    cudaMemcpy(d_spheres, spheres, sphere_count*sizeof(struct Sphere), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_spheres, spheres, sphere_count*sizeof(Sphere), cudaMemcpyHostToDevice);
     cudaMemcpy(d_lights, lights, light_count*sizeof(struct Light), cudaMemcpyHostToDevice);
 
     dim3 threadsPerBlock(8, 16);
@@ -335,6 +335,8 @@ void raytrace_spheres(Sphere* spheres, size_t sphere_count, Light* lights, size_
 
     initialize_states<<<blocksPerGrid, threadsPerBlock>>>(time(0), camera->width, d_states);
     
+    cudaDeviceSynchronize();
+
     raytrace_spheres_kernel<<<blocksPerGrid, threadsPerBlock>>>(
         d_spheres,
         sphere_count,

@@ -76,7 +76,7 @@ void Scene::load_scene(std::string filepath) {
         std::string mat = jf["spheres"][i]["material"];
 
         CU_Vector3f color;
-        uint material = DIFFUSE;
+        material_type material = DIFFUSE;
         float ri(0.f);
         float ro(0.f);
 
@@ -98,6 +98,25 @@ void Scene::load_scene(std::string filepath) {
         float R = jf["spheres"][i]["radius"];
 
         add_sphere(pos, R, color, material, ro, ri);
+    }
+
+    // Add objects
+    for(int i = 0; i < jf["objects"].size(); i ++) {
+        std::string obj_path = jf["objects"][i]["filepath"];
+
+        CU_Vector3f pos(jf["objects"][i]["pos"][0],
+                        jf["objects"][i]["pos"][1],
+                        jf["objects"][i]["pos"][2]);
+
+        CU_Vector3f scale(jf["objects"][i]["scale"][0],
+                          jf["objects"][i]["scale"][1],
+                          jf["objects"][i]["scale"][2]);
+
+        CU_Vector3f rotation(jf["objects"][i]["rotation"][0],
+                             jf["objects"][i]["rotation"][1],
+                             jf["objects"][i]["rotation"][2]);
+
+        add_object(obj_path, pos, scale, rotation);
     }
 
     // Add lights
@@ -192,15 +211,28 @@ void Scene::transform_camera(CU_Vector3f direction) {
     camera->E[2*4 + 3] += direction[2];
 }
 
-void Scene::add_sphere(CU_Vector3f pos, float radius, CU_Vector3f color, uint material, float ro, float ri) {
+void Scene::add_sphere(CU_Vector3f pos, float radius, CU_Vector3f color, material_type material, float ro, float ri) {
+    Material mat;
+    mat.type = material;
+    mat.color = color;
+    mat.ro = ro;
+    mat.ri = ri;
+    
     Sphere s;
     s.pos = pos;
     s.radius = radius;
-    s.color = color;
-    s.material = material;
-    s.ro = ro;
-    s.ri = ri;
+    s.material = mat;
     spheres.push_back(s);
+}
+
+void Scene::add_object(std::string obj_path, CU_Vector3f pos, CU_Vector3f scale, CU_Vector3f rotation) {
+    // TriangleMesh mesh;
+    // mesh.readOBJ(obj_path.c_str());
+    // Object o;
+    // o.pos = pos;
+    // o.scale = scale;
+    // o.rotation = rotation;
+    return;
 }
 
 void Scene::add_light(CU_Vector3f pos, float intensity) {
