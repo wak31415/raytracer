@@ -48,9 +48,9 @@ class CU_Matrix {
         float data[MatSize*MatSize];
 };
 
-template <size_t VecSize>
-__host__ __device__ CU_Vector<VecSize> operator*(const CU_Matrix<VecSize> &M, const CU_Vector<VecSize> &v) {
-    CU_Vector<VecSize> R;
+template <size_t VecSize, typename T>
+__host__ __device__ CU_Vector<VecSize, float> operator*(const CU_Matrix<VecSize> &M, const CU_Vector<VecSize, T> &v) {
+    CU_Vector<VecSize, float> R;
 
     for (size_t i = 0; i < VecSize; i++)
     {

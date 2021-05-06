@@ -19,6 +19,9 @@ void raytrace_spheres(Sphere* spheres,
                       size_t sphere_count, 
                       Triangle* triangles,
                       size_t triangle_count,
+                      CU_Vector3f* vertices,
+                      CU_Vector3f* normals,
+                      size_t vertex_count,
                       Light* lights, 
                       size_t light_count,
                       CU_Vector3f* image, 
@@ -45,7 +48,10 @@ void Scene::load_scene(std::string filepath) {
     camera->E[1*4+1] = -1.f;
     camera->E[2*4+2] = -1.f;
 
-    std::ifstream ifs("../scene.json");
+    std::ifstream ifs(filepath);
+    if(!ifs.is_open()) {
+        throw std::invalid_argument("File not found");
+    }
     json jf = json::parse(ifs);
 
     spheres.clear();
@@ -163,7 +169,7 @@ void Scene::load_scene(std::string filepath) {
 }
 
 void Scene::render() {
-    raytrace_spheres(&spheres[0], spheres.size(), &triangles[0], triangles.size(), &lights[0], lights.size(), image, camera);
+    raytrace_spheres(&spheres[0], spheres.size(), &triangles[0], triangles.size(), &vertices[0], &normals[0], vertices.size(), &lights[0], lights.size(), image, camera);
 
     size_t num_pixels = camera->width*camera->height;
 
@@ -256,18 +262,24 @@ void Scene::add_sphere(CU_Vector3f pos, float radius, CU_Vector3f color, materia
 }
 
 void Scene::add_object(std::string obj_path, CU_Vector3f pos, CU_Vector3f scale, CU_Vector3f rotation, Material material) {
-    // TriangleMesh mesh;
-    // mesh.readOBJ(obj_path.c_str());
-    // Object o;
-    // o.pos = pos;
-    // o.scale = scale;
-    // o.rotation = rotation;
+
     Triangle t;
-    t.A = CU_Vector3f(-10, 10.f, 22.f);
-    t.B = CU_Vector3f(-20, 0.f, 30.f);
-    t.C = CU_Vector3f(0.f, 0.f, 30.f);
-    t.N = (t.B - t.A).cross(t.C - t.A);
-    t.N.normalize();
+    CU_Vector3f A(-10, 10.f, 22.f);
+    CU_Vector3f B(-20, 0.f, 30.f);
+    CU_Vector3f C(0.f, 0.f, 30.f);
+    CU_Vector3f N = (B - A).cross(C - A);
+    N.normalize();
+
+    vertices.push_back(A);
+    vertices.push_back(B);
+    vertices.push_back(C);
+    normals.push_back(N);
+    normals.push_back(N);
+    normals.push_back(N);
+
+    t.v = CU_Vector3i(0, 1, 2);
+    t.n = CU_Vector3i(0, 1, 2);
+
     t.material = material;
     triangles.push_back(t);
     return;

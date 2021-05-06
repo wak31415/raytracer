@@ -1,0 +1,65 @@
+{
+    "spheres" : [
+        {
+            "pos": [0, 0, -1000],
+            "radius" : 940,
+            "color" : [0, 1, 0],
+            "material" : "diffuse"
+        },
+        {
+            "pos": [0, -1000, 0],
+            "radius" : 990,
+            "color" : [0, 0, 1],
+            "material" : "diffuse"
+        },
+        {
+            "pos": [0, 0, 1000],
+            "radius" : 940,
+            "color" : [1, 0, 1],
+            "material" : "diffuse"
+        },
+        {
+            "pos": [0, 1000, 0],
+            "radius" : 940,
+            "color" : [1, 0, 0],
+            "material" : "diffuse"
+        },
+        {
+            "pos": [-1000, 0, 0],
+            "radius" : 940,
+            "color" : [0.25, 1, 1],
+            "material" : "diffuse"
+        },
+        {
+            "pos": [1000, 0, 0],
+            "radius" : 940,
+            "color" : [1, 1, 0.25],
+            "material" : "diffuse"
+        }
+    ],
+    "objects" : [
+        {
+            "filepath": "../assets/objects/cube.obj",
+            "pos": [0, 0, 0],
+            "scale": [1, 1, 1],
+            "rotation": [0, 0, 0],
+            "color" : [1, 1, 1],
+            "material": "diffuse",
+            "refractive_index" : [1, 1.5]
+        }
+    ],
+    "lights" : [
+        {
+            "pos": [-10, 20, 40],
+            "intensity": 10000000000
+        }
+    ],
+    "camera" : {
+        "pos": [0, 0, 55],
+        "rotation": [0, 0, 0],
+        "width": 512,
+        "height": 512,
+        "fov": 60,
+        "num_rays" : 32
+    }
+}

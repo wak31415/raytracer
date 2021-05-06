@@ -35,9 +35,9 @@ struct Sphere {
 };
 
 struct Triangle {
-    CU_Vector3f A;
-    CU_Vector3f B;
-    CU_Vector3f C;
-    CU_Vector3f N;
+    CU_Vector3i v;
+    CU_Vector3i n;
+    CU_Vector3i uv;
+    int group;
     Material material;
 };

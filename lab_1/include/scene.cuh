@@ -32,7 +32,14 @@ class Scene {
 
     private:
         std::vector<Sphere> spheres;
+
+        // Required for meshes
         std::vector<Triangle> triangles;
+        std::vector<CU_Vector3f> vertices;
+        std::vector<CU_Vector3f> normals;
+        std::vector<CU_Vector<2, float>> uvs;
+        std::vector<CU_Vector3f> vertexcolors;
+
         std::vector<Light> lights;
         Camera* camera;
         CU_Vector3f* image;
