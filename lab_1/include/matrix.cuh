@@ -38,6 +38,22 @@ class CU_Matrix {
             return res;
         }
 
+        __host__ __device__ void translate(CU_Vector3f t) {
+            for(size_t i = 0; i < 3; i++) {
+                data[i*MatSize + 3] += t[i];
+            }
+        }
+
+        // scale with respect to P
+        __host__ __device__ void scale(CU_Vector3f _scale) {
+            for(size_t i = 0; i < 3; i++) {
+                data[i*MatSize + 0] *= _scale[i];
+                data[i*MatSize + 1] *= _scale[i];
+                data[i*MatSize + 2] *= _scale[i];
+                data[i*MatSize + 3] *= _scale[i];
+            }
+        }
+
         __host__ __device__ size_t get_size() { return MatSize; }
 
         __host__ __device__ const float& operator[](int i) const { return data[i]; }
@@ -59,6 +75,21 @@ __host__ __device__ CU_Vector<VecSize, float> operator*(const CU_Matrix<VecSize>
             tmp += M[i*VecSize + j] * v[j];
 
         R[i] = tmp;
+    }
+    return R;
+}
+
+template <size_t VecSize, typename T>
+__host__ __device__ CU_Vector<VecSize, float> operator*(const CU_Matrix<VecSize+1> &M, const CU_Vector<VecSize, T> &v) {
+    CU_Vector<VecSize, float> R;
+
+    for (size_t i = 0; i < VecSize; i++)
+    {
+        float tmp = 0.f;
+        for (size_t j = 0; j < VecSize; j++)
+            tmp += M[i*(VecSize+1) + j] * v[j];
+
+        R[i] = tmp + M[i*(VecSize+1) + VecSize];
     }
     return R;
 }

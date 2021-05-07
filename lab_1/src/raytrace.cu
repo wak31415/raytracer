@@ -11,8 +11,8 @@
 #define GAMMA 2.2
 #define MAX_RAY_DEPTH 7
 
-#define INDIRECT_LIGHTING
-#define ANTIALIASING
+//#define INDIRECT_LIGHTING
+//#define ANTIALIASING
 
 __global__ void initialize_states(unsigned int seed, size_t width, curandState_t* states) {
     uint u_x = blockDim.x * blockIdx.x + threadIdx.x;
@@ -90,7 +90,10 @@ __device__ float get_distance(Triangle* triangles,
                               CU_Vector3f* vertices,
                               CU_Vector3f ray,
                               CU_Vector3f start, 
-                              int* intersect_id)
+                              int* intersect_id,
+                              float* alpha,
+                              float* beta,
+                              float* gamma)
 {
     float min_dist = CUDART_INF_F;
 
@@ -107,15 +110,18 @@ __device__ float get_distance(Triangle* triangles,
         CU_Vector3f N = e1.cross(e2);
         float rayDotN = dot(ray, N);
 
-        float beta = dot(e2, A_O_cross_u) / rayDotN;
-        float gamma = - dot(e1, A_O_cross_u) / rayDotN;
+        float _beta = dot(e2, A_O_cross_u) / rayDotN;
+        float _gamma = - dot(e1, A_O_cross_u) / rayDotN;
 
-        float alpha = 1.f - beta - gamma;
-        if (alpha >= 0 && beta >= 0 && gamma >= 0) {
+        float _alpha = 1.f - _beta - _gamma;
+        if (_alpha >= 0 && _beta >= 0 && _gamma >= 0) {
             float t = dot(A - start, N) / rayDotN;
             if (t > 0 && (*intersect_id < 0 || t < min_dist)) {
                 min_dist = t;
                 *intersect_id = i;
+                *alpha = _alpha;
+                *beta = _beta;
+                *gamma = _gamma;
             }
         }
     }
@@ -130,11 +136,14 @@ __device__ CU_Vector3f get_intersection(Sphere* spheres,
                                         CU_Vector3f ray,
                                         CU_Vector3f start, 
                                         int* sphere_id,
-                                        int* triangle_id) 
+                                        int* triangle_id,
+                                        float* alpha,
+                                        float* beta,
+                                        float* gamma) 
 {
     float min_dist = CUDART_INF_F;
     float min_dist_spheres = get_distance(spheres, sphere_count, ray, start, sphere_id);
-    float min_dist_triangles = get_distance(triangles, triangle_count, vertices, ray, start, triangle_id);
+    float min_dist_triangles = get_distance(triangles, triangle_count, vertices, ray, start, triangle_id, alpha, beta, gamma);
     // *sphere_id = -1;
     int tmp;
     if(min_dist_spheres < min_dist) {
@@ -158,8 +167,10 @@ __device__ bool is_visible(Sphere* spheres, size_t sphere_count, Triangle* trian
     CU_Vector3f ray = target - origin;
     ray.normalize();
 
+    float tmp;
+
     float min_dist_spheres = get_distance(spheres, sphere_count, ray, origin, &sphere_id);
-    float min_dist_triangles = get_distance(triangles, triangle_count, vertices, ray, origin, &triangle_id);    
+    float min_dist_triangles = get_distance(triangles, triangle_count, vertices, ray, origin, &triangle_id, &tmp, &tmp, &tmp);    
     
     float dist_to_target = (target - origin).norm();
     
@@ -241,7 +252,8 @@ __device__ CU_Vector3f get_color(Sphere* spheres,
     for(int depth = 0; depth < MAX_RAY_DEPTH; depth++) {
         int sphere_id = -1;
         int triangle_id = -1;
-        CU_Vector3f P = get_intersection(spheres, sphere_count, triangles, triangle_count, vertices, ray, start, &sphere_id, &triangle_id);
+        float alpha, beta, gamma;
+        CU_Vector3f P = get_intersection(spheres, sphere_count, triangles, triangle_count, vertices, ray, start, &sphere_id, &triangle_id, &alpha, &beta, &gamma);
         
         if(sphere_id >= 0 || triangle_id >= 0) {
             Material material;
@@ -253,7 +265,7 @@ __device__ CU_Vector3f get_color(Sphere* spheres,
             } else {
                 Triangle T = triangles[triangle_id];
                 material = T.material;
-                N = normals[T.n[0]];// + normals[T.n[1]] + normals[T.n[2]];
+                N = alpha*normals[T.n[0]] + beta*normals[T.n[1]] + gamma*normals[T.n[2]];
                 N.normalize();
             }
 

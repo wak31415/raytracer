@@ -1,9 +1,13 @@
 #include <nlohmann/json.hpp>
+#include <iostream>
 #include <fstream>
 #include <stdio.h>
 #include <string>
 
 #include "scene.cuh"
+
+#define TINYOBJLOADER_IMPLEMENTATION
+#include "tiny_obj_loader.h"
 
 #define PI 3.14159265358979
 
@@ -27,6 +31,38 @@ void raytrace_spheres(Sphere* spheres,
                       CU_Vector3f* image, 
                       Camera* camera
 );
+
+CU_Matrix<4> rotation_matrix(float alpha, float beta, float gamma) {
+    CU_Matrix<4> Rx;
+    CU_Matrix<4> Ry;
+    CU_Matrix<4> Rz;
+
+    Rx.set_identity();
+    Ry.set_identity();
+    Rz.set_identity();
+
+    Rx(1, 1) = cosf(alpha*PI/180);
+    Rx(1, 2) = -sinf(alpha*PI/180);
+    Rx(2, 1) = -Rx(1, 2);
+    Rx(2, 2) = Rx(1, 1);
+
+    Ry(0, 0) = cosf(beta*PI/180);
+    Ry(0, 2) = sinf(beta*PI/180);
+    Ry(2, 0) = -Ry(0, 2);
+    Ry(2, 2) = Ry(0, 0);
+
+    Rz(0, 0) = cosf(gamma*PI/180);
+    Rz(0, 1) = -sinf(gamma*PI/180);
+    Rz(1, 0) = -Rz(0, 1);
+    Rz(1, 1) = Rz(0, 0);
+
+    CU_Matrix<4> R = Rz * Ry * Rx;
+    return R;
+}
+
+CU_Matrix<4> rotation_matrix(CU_Vector3f rotation) {
+    return rotation_matrix(rotation[0], rotation[1], rotation[2]);
+}
 
 Scene::Scene() {
     camera = (Camera*)malloc(sizeof(struct Camera));
@@ -204,31 +240,7 @@ void Scene::set_camera_intrinsics(float fov, size_t width, size_t height) {
 }
 
 void Scene::rotate_camera(float alpha, float beta, float gamma) {
-    CU_Matrix<4> Rx;
-    CU_Matrix<4> Ry;
-    CU_Matrix<4> Rz;
-
-    Rx.set_identity();
-    Ry.set_identity();
-    Rz.set_identity();
-
-    Rx(1, 1) = cosf(alpha*PI/180);
-    Rx(1, 2) = -sinf(alpha*PI/180);
-    Rx(2, 1) = -Rx(1, 2);
-    Rx(2, 2) = Rx(1, 1);
-
-    Ry(0, 0) = cosf(beta*PI/180);
-    Ry(0, 2) = sinf(beta*PI/180);
-    Ry(2, 0) = -Ry(0, 2);
-    Ry(2, 2) = Ry(0, 0);
-
-    Rz(0, 0) = cosf(gamma*PI/180);
-    Rz(0, 1) = -sinf(gamma*PI/180);
-    Rz(1, 0) = -Rz(0, 1);
-    Rz(1, 1) = Rz(0, 0);
-
-    CU_Matrix<4> R = Rz * Ry * Rx;
-    camera->E = R*camera->E;
+    camera->E = rotation_matrix(alpha, beta, gamma)*camera->E;
 }
 
 void Scene::rotate_camera(CU_Vector3f rotation) {
@@ -261,27 +273,130 @@ void Scene::add_sphere(CU_Vector3f pos, float radius, CU_Vector3f color, materia
     spheres.push_back(s);
 }
 
-void Scene::add_object(std::string obj_path, CU_Vector3f pos, CU_Vector3f scale, CU_Vector3f rotation, Material material) {
+void Scene::add_object(std::string inputfile, CU_Vector3f translation, CU_Vector3f scale, CU_Vector3f rotation, Material material) {
+    tinyobj::ObjReader reader;
 
-    Triangle t;
-    CU_Vector3f A(-10, 10.f, 22.f);
-    CU_Vector3f B(-20, 0.f, 30.f);
-    CU_Vector3f C(0.f, 0.f, 30.f);
-    CU_Vector3f N = (B - A).cross(C - A);
-    N.normalize();
+    CU_Matrix<4> transform;
+    transform.set_identity();
+    transform.scale(scale);
+    transform = rotation_matrix(rotation) * transform;
+    transform.translate(translation);
 
-    vertices.push_back(A);
-    vertices.push_back(B);
-    vertices.push_back(C);
-    normals.push_back(N);
-    normals.push_back(N);
-    normals.push_back(N);
+    if (!reader.ParseFromFile(inputfile)) {
+        if (!reader.Error().empty()) {
+            std::cerr << "TinyObjReader: " << reader.Error();
+        }
+        exit(1);
+    }
 
-    t.v = CU_Vector3i(0, 1, 2);
-    t.n = CU_Vector3i(0, 1, 2);
+    if (!reader.Warning().empty()) {
+        std::cout << "TinyObjReader: " << reader.Warning();
+    }
 
-    t.material = material;
-    triangles.push_back(t);
+    auto& attrib = reader.GetAttrib();
+    auto& shapes = reader.GetShapes();
+    auto& materials = reader.GetMaterials();
+
+    // Loop over shapes
+    for (size_t s = 0; s < shapes.size(); s++) {
+        // Loop over faces(polygon)
+        size_t index_offset = 0;
+        for (size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++) {
+            size_t fv = size_t(shapes[s].mesh.num_face_vertices[f]);
+
+            bool has_normal = true;
+            CU_Vector3f face_normals[fv];
+
+            // Loop over vertices in the face.
+            for (size_t v = 0; v < fv; v++) {
+                // access to vertex
+                tinyobj::index_t idx = shapes[s].mesh.indices[index_offset + v];
+                tinyobj::real_t vx = attrib.vertices[3*size_t(idx.vertex_index)+0];
+                tinyobj::real_t vy = attrib.vertices[3*size_t(idx.vertex_index)+1];
+                tinyobj::real_t vz = attrib.vertices[3*size_t(idx.vertex_index)+2];
+
+                CU_Vector3f vtx = CU_Vector3f((float)vx, (float)vy, (float)vz);
+                vtx = transform * vtx;
+            
+                // Check if `normal_index` is zero or positive. negative = no normal data
+                if (idx.normal_index >= 0) {
+                    tinyobj::real_t nx = attrib.normals[3*size_t(idx.normal_index)+0];
+                    tinyobj::real_t ny = attrib.normals[3*size_t(idx.normal_index)+1];
+                    tinyobj::real_t nz = attrib.normals[3*size_t(idx.normal_index)+2];
+
+                    face_normals[v][0] = (float)nx;
+                    face_normals[v][1] = (float)ny;
+                    face_normals[v][2] = (float)nz;
+                    
+                } else {
+                    has_normal = false;
+                }
+
+                // Check if `texcoord_index` is zero or positive. negative = no texcoord data
+                if (idx.texcoord_index >= 0) {
+                    tinyobj::real_t tx = attrib.texcoords[2*size_t(idx.texcoord_index)+0];
+                    tinyobj::real_t ty = attrib.texcoords[2*size_t(idx.texcoord_index)+1];
+                }
+
+                // Optional: vertex colors
+                // tinyobj::real_t red   = attrib.colors[3*size_t(idx.vertex_index)+0];
+                // tinyobj::real_t green = attrib.colors[3*size_t(idx.vertex_index)+1];
+                // tinyobj::real_t blue  = attrib.colors[3*size_t(idx.vertex_index)+2];
+            
+                vertices.push_back(vtx);
+            }
+            for (size_t v = 0; v < fv; v++)
+            {
+                if(has_normal) {
+                    CU_Vector3f N = face_normals[v];
+                    N = transform.get_rotation() * N;
+                    N.normalize();
+                    normals.push_back(N);
+                } else {
+                    CU_Vector3f N = (vertices[index_offset+1]-vertices[index_offset]).cross(vertices[index_offset+2] - vertices[index_offset]);
+                    N = transform.get_rotation() * N;
+                    N.normalize();
+                    normals.push_back(N);
+                }
+            }
+
+            Triangle t;
+            t.v = CU_Vector3i(index_offset, index_offset+1, index_offset+2);
+            t.n = CU_Vector3i(index_offset, index_offset+1, index_offset+2);
+
+            t.material = material;
+            triangles.push_back(t);
+
+            index_offset += fv;
+
+            // per-face material
+            // shapes[s].mesh.material_ids[f];
+        }
+    }
+
+    std::cout << "Loaded " << vertices.size() << " vertices." << std::endl;
+    std::cout << "Loaded " << normals.size() << " normals." << std::endl;
+    std::cout << "Loaded " << triangles.size() << " triangles." << std::endl;
+
+    // Triangle t;
+    // CU_Vector3f A(-10, 10.f, 22.f);
+    // CU_Vector3f B(-20, 0.f, 30.f);
+    // CU_Vector3f C(0.f, 0.f, 30.f);
+    // CU_Vector3f N = (B - A).cross(C - A);
+    // N.normalize();
+
+    // vertices.push_back(A);
+    // vertices.push_back(B);
+    // vertices.push_back(C);
+    // normals.push_back(N);
+    // normals.push_back(N);
+    // normals.push_back(N);
+
+    // t.v = CU_Vector3i(0, 1, 2);
+    // t.n = CU_Vector3i(0, 1, 2);
+
+    // t.material = material;
+    // triangles.push_back(t);
     return;
 }
 
