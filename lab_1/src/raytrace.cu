@@ -345,19 +345,23 @@ __device__ CU_Vector3f get_color(Sphere* spheres,
                 *terminate_early = false;
                 #endif
 
-                // Normalized vector point --> light
-                CU_Vector3f S_P = lights[0].pos - P;
-                float d = S_P.norm();
-                CU_Vector3f w_i = 1.f/d * S_P;
+                for (size_t l = 0; l < light_count; l++)
+                {
+                    // Normalized vector point --> light
+                    CU_Vector3f S_P = lights[l].pos - P;
+                    float d = S_P.norm();
+                    CU_Vector3f w_i = 1.f/d * S_P;
 
-                float N_wi_dot = max(dot(N, w_i), 0.f);
+                    float N_wi_dot = max(dot(N, w_i), 0.f);
 
-                // check if the light is visible from P
-                bool P_visible = is_visible(spheres, sphere_count, triangles, triangle_count, vertices, bounding_boxes, obj_count, P+0.01*N, lights[0].pos);
+                    // check if the light is visible from P
+                    bool P_visible = is_visible(spheres, sphere_count, triangles, triangle_count, vertices, bounding_boxes, obj_count, P+0.01*N, lights[l].pos);
 
-                CU_Vector3f direct = lights[0].I / (4*M_PI*M_PI*d*d) * material.color * P_visible * N_wi_dot;
+                    CU_Vector3f direct = lights[l].I / (4*M_PI*M_PI*d*d) * material.color * P_visible * N_wi_dot;
+                    
+                    L += albedo * direct;
+                }
                 
-                L += albedo * direct;
 
                 #ifndef INDIRECT_LIGHTING
                 return L;
