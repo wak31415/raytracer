@@ -24,7 +24,7 @@ You can refer to the [default scene](assets/scenes/default.json) for an example.
 Animations can be easily achieved by changing [main.cu](src/main.cu) to iterate over a list of scene files and writing the resulting images to a folder. If you only intend on moving the camera, the `Scene` class provides simple public transformation and rotation methods you can call from `main.cu`. When rendering multiple frames, change the seed in `Scene::render` on every frame (e.g. by setting the current frame number to be the seed). This ensures there is no static noise in the video.
 The application can also predict the remaining execution time.
 
-![Camera flyover](examples/video.mp4)
+![Camera flyover](examples/flyover.gif)
 
 
 ## Dependencies
