@@ -41,3 +41,8 @@ struct Triangle {
     int group;
     Material material;
 };
+
+struct BoundingBox {
+    CU_Vector3f _min;
+    CU_Vector3f _max;
+};

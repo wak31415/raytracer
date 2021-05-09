@@ -75,6 +75,15 @@ class CU_Vector {
             return _min; 
         }
 
+        CUDA_CALLABLE_MEMBER T max() {
+            T _max = data[0];
+            for (size_t i = 0; i < N; i++)
+            {
+                if(data[i] > _max) _max = data[i];
+            }
+            return _max; 
+        }
+
         CUDA_CALLABLE_MEMBER unsigned int argmin_abs() {
             T _min = data[0];
             unsigned int _arg = 0;

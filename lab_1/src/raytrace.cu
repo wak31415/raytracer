@@ -9,10 +9,11 @@
 #include <math_constants.h>
 
 #define GAMMA 2.2
-#define MAX_RAY_DEPTH 7
+#define MAX_RAY_DEPTH 5
 
-//#define INDIRECT_LIGHTING
-//#define ANTIALIASING
+// #define INDIRECT_LIGHTING
+// #define ANTIALIASING
+#define BOUNDING_BOX
 
 __global__ void initialize_states(unsigned int seed, size_t width, curandState_t* states) {
     uint u_x = blockDim.x * blockIdx.x + threadIdx.x;
@@ -88,6 +89,8 @@ __device__ float get_distance(Sphere* spheres,
 __device__ float get_distance(Triangle* triangles,
                               size_t triangle_count,
                               CU_Vector3f* vertices,
+                              BoundingBox* bounding_boxes,
+                              size_t obj_count,
                               CU_Vector3f ray,
                               CU_Vector3f start, 
                               int* intersect_id,
@@ -96,6 +99,51 @@ __device__ float get_distance(Triangle* triangles,
                               float* gamma)
 {
     float min_dist = CUDART_INF_F;
+
+#ifdef BOUNDING_BOX
+    bool intersect = false;
+    CU_Vector3f ni(1, 0, 0);
+    CU_Vector3f nj(0, 1, 0);
+    CU_Vector3f nk(0, 0, 1);
+
+    CU_Vector3f n[3] = {ni, nj, nk};
+
+    for (size_t o = 0; o < obj_count; o++)
+    {
+        CU_Vector3f B_min = bounding_boxes[o]._min;
+        CU_Vector3f B_max = bounding_boxes[o]._max;
+
+        CU_Vector3f t_0;
+        CU_Vector3f t_1;
+
+        for (size_t i = 0; i < 3; i++)
+        {
+            float rayDotN = dot(ray, n[i]);
+            if(rayDotN != 0) {
+                float t1 = dot((B_min - start), n[i]) / rayDotN;
+                float t2 = dot((B_max - start), n[i]) / rayDotN;
+
+                if(t1 < t2) {
+                    t_0[i] = t1;
+                    t_1[i] = t2;
+                } else {
+                    t_0[i] = t2;
+                    t_1[i] = t1;
+                }
+            }
+        }
+
+        if(t_1.min() > t_0.max()) { 
+            intersect = true;
+            break; 
+        }
+    }
+
+    
+    if(!intersect) {
+        return min_dist;
+    }
+#endif
 
     for(size_t i = 0; i < triangle_count; i++) {
         Triangle T = triangles[i];
@@ -133,6 +181,8 @@ __device__ CU_Vector3f get_intersection(Sphere* spheres,
                                         Triangle* triangles,
                                         size_t triangle_count,
                                         CU_Vector3f* vertices,
+                                        BoundingBox* bounding_boxes,
+                                        size_t obj_count,
                                         CU_Vector3f ray,
                                         CU_Vector3f start, 
                                         int* sphere_id,
@@ -143,7 +193,11 @@ __device__ CU_Vector3f get_intersection(Sphere* spheres,
 {
     float min_dist = CUDART_INF_F;
     float min_dist_spheres = get_distance(spheres, sphere_count, ray, start, sphere_id);
-    float min_dist_triangles = get_distance(triangles, triangle_count, vertices, ray, start, triangle_id, alpha, beta, gamma);
+    float min_dist_triangles = get_distance(triangles, triangle_count, 
+                                            vertices, 
+                                            bounding_boxes, obj_count, 
+                                            ray, start, 
+                                            triangle_id, alpha, beta, gamma);
     // *sphere_id = -1;
     int tmp;
     if(min_dist_spheres < min_dist) {
@@ -161,7 +215,12 @@ __device__ CU_Vector3f get_intersection(Sphere* spheres,
     return start + min_dist*ray;
 }
 
-__device__ bool is_visible(Sphere* spheres, size_t sphere_count, Triangle* triangles, size_t triangle_count, CU_Vector3f* vertices, CU_Vector3f origin, CU_Vector3f target) {
+__device__ bool is_visible(Sphere* spheres, size_t sphere_count, 
+                           Triangle* triangles, size_t triangle_count, 
+                           CU_Vector3f* vertices, 
+                           BoundingBox* bounding_boxes, size_t obj_count, 
+                           CU_Vector3f origin, CU_Vector3f target) 
+{
     int sphere_id = -1;
     int triangle_id = -1;
     CU_Vector3f ray = target - origin;
@@ -170,7 +229,11 @@ __device__ bool is_visible(Sphere* spheres, size_t sphere_count, Triangle* trian
     float tmp;
 
     float min_dist_spheres = get_distance(spheres, sphere_count, ray, origin, &sphere_id);
-    float min_dist_triangles = get_distance(triangles, triangle_count, vertices, ray, origin, &triangle_id, &tmp, &tmp, &tmp);    
+    float min_dist_triangles = get_distance(triangles, triangle_count, 
+                                            vertices, 
+                                            bounding_boxes, obj_count, 
+                                            ray, origin, 
+                                            &triangle_id, &tmp, &tmp, &tmp);    
     
     float dist_to_target = (target - origin).norm();
     
@@ -238,6 +301,8 @@ __device__ CU_Vector3f get_color(Sphere* spheres,
                                  size_t triangle_count, 
                                  CU_Vector3f* vertices,
                                  CU_Vector3f* normals,
+                                 BoundingBox* bounding_boxes,
+                                 size_t obj_count,
                                  Light* lights,
                                  size_t light_count,
                                  CU_Vector3f start, 
@@ -253,7 +318,7 @@ __device__ CU_Vector3f get_color(Sphere* spheres,
         int sphere_id = -1;
         int triangle_id = -1;
         float alpha, beta, gamma;
-        CU_Vector3f P = get_intersection(spheres, sphere_count, triangles, triangle_count, vertices, ray, start, &sphere_id, &triangle_id, &alpha, &beta, &gamma);
+        CU_Vector3f P = get_intersection(spheres, sphere_count, triangles, triangle_count, vertices, bounding_boxes, obj_count, ray, start, &sphere_id, &triangle_id, &alpha, &beta, &gamma);
         
         if(sphere_id >= 0 || triangle_id >= 0) {
             Material material;
@@ -288,7 +353,7 @@ __device__ CU_Vector3f get_color(Sphere* spheres,
                 float N_wi_dot = max(dot(N, w_i), 0.f);
 
                 // check if the light is visible from P
-                bool P_visible = is_visible(spheres, sphere_count, triangles, triangle_count, vertices, P+0.01*N, lights[0].pos);
+                bool P_visible = is_visible(spheres, sphere_count, triangles, triangle_count, vertices, bounding_boxes, obj_count, P+0.01*N, lights[0].pos);
 
                 CU_Vector3f direct = lights[0].I / (4*M_PI*M_PI*d*d) * material.color * P_visible * N_wi_dot;
                 
@@ -380,6 +445,8 @@ __global__ void raytrace_spheres_kernel(Sphere* spheres,
                                         size_t triangle_count,
                                         CU_Vector3f* vertices,
                                         CU_Vector3f* normals,
+                                        BoundingBox* bounding_boxes,
+                                        size_t obj_count,
                                         Light* lights,
                                         size_t light_count,
                                         CU_Vector3f* image, 
@@ -420,7 +487,7 @@ __global__ void raytrace_spheres_kernel(Sphere* spheres,
         ray_dir.normalize();
         ray_dir = cam_rot*ray_dir;
 
-        color += get_color(spheres, sphere_count, triangles, triangle_count, vertices, normals, lights, light_count, camera_pos, ray_dir, &terminate_early, states, idx);
+        color += get_color(spheres, sphere_count, triangles, triangle_count, vertices, normals, bounding_boxes, obj_count, lights, light_count, camera_pos, ray_dir, &terminate_early, states, idx);
 
 #ifndef INDIRECT_LIGHTING
         if(terminate_early) break;
@@ -441,7 +508,9 @@ void raytrace_spheres(Sphere* spheres,
                       size_t triangle_count, 
                       CU_Vector3f* vertices,
                       CU_Vector3f* normals,
+                      BoundingBox* bounding_boxes,
                       size_t vertex_count,
+                      size_t obj_count,
                       Light* lights, 
                       size_t light_count, 
                       CU_Vector3f* image, 
@@ -454,6 +523,7 @@ void raytrace_spheres(Sphere* spheres,
     Triangle* d_triangles;
     CU_Vector3f* d_vertices;
     CU_Vector3f* d_normals;
+    BoundingBox* d_bounding_boxes;
     Light* d_lights;
     CU_Matrix<4> d_cam_rot;
     CU_Vector3f d_cam_trans;
@@ -468,6 +538,7 @@ void raytrace_spheres(Sphere* spheres,
     cudaMalloc((void**)&d_triangles, triangle_count*sizeof(Triangle));
     cudaMalloc((void**)&d_vertices, vertex_count*sizeof(CU_Vector3f));
     cudaMalloc((void**)&d_normals, vertex_count*sizeof(CU_Vector3f));
+    cudaMalloc((void**)&d_bounding_boxes, obj_count*sizeof(BoundingBox));
     cudaMalloc((void**)&d_lights, light_count*sizeof(struct Light));
     cudaMalloc((void**)&d_image, pixel_count*sizeof(CU_Vector3f));
 
@@ -475,6 +546,7 @@ void raytrace_spheres(Sphere* spheres,
     cudaMemcpy(d_triangles, triangles, triangle_count*sizeof(Triangle), cudaMemcpyHostToDevice);
     cudaMemcpy(d_vertices, vertices, vertex_count*sizeof(CU_Vector3f), cudaMemcpyHostToDevice);
     cudaMemcpy(d_normals, normals, vertex_count*sizeof(CU_Vector3f), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_bounding_boxes, bounding_boxes, obj_count*sizeof(BoundingBox), cudaMemcpyHostToDevice);
     cudaMemcpy(d_lights, lights, light_count*sizeof(struct Light), cudaMemcpyHostToDevice);
 
     dim3 threadsPerBlock(8, 8);
@@ -505,6 +577,8 @@ void raytrace_spheres(Sphere* spheres,
         triangle_count,
         d_vertices,
         d_normals,
+        d_bounding_boxes,
+        obj_count,
         d_lights,
         light_count,
         d_image,

@@ -3,13 +3,12 @@
 #include <fstream>
 #include <stdio.h>
 #include <string>
+#include <cmath>
 
 #include "scene.cuh"
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
-
-#define PI 3.14159265358979
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb/stb_image_write.h"
@@ -25,7 +24,9 @@ void raytrace_spheres(Sphere* spheres,
                       size_t triangle_count,
                       CU_Vector3f* vertices,
                       CU_Vector3f* normals,
+                      BoundingBox* bounding_boxes,
                       size_t vertex_count,
+                      size_t obj_count,
                       Light* lights, 
                       size_t light_count,
                       CU_Vector3f* image, 
@@ -41,18 +42,18 @@ CU_Matrix<4> rotation_matrix(float alpha, float beta, float gamma) {
     Ry.set_identity();
     Rz.set_identity();
 
-    Rx(1, 1) = cosf(alpha*PI/180);
-    Rx(1, 2) = -sinf(alpha*PI/180);
+    Rx(1, 1) = cosf(alpha*M_PI/180);
+    Rx(1, 2) = -sinf(alpha*M_PI/180);
     Rx(2, 1) = -Rx(1, 2);
     Rx(2, 2) = Rx(1, 1);
 
-    Ry(0, 0) = cosf(beta*PI/180);
-    Ry(0, 2) = sinf(beta*PI/180);
+    Ry(0, 0) = cosf(beta*M_PI/180);
+    Ry(0, 2) = sinf(beta*M_PI/180);
     Ry(2, 0) = -Ry(0, 2);
     Ry(2, 2) = Ry(0, 0);
 
-    Rz(0, 0) = cosf(gamma*PI/180);
-    Rz(0, 1) = -sinf(gamma*PI/180);
+    Rz(0, 0) = cosf(gamma*M_PI/180);
+    Rz(0, 1) = -sinf(gamma*M_PI/180);
     Rz(1, 0) = -Rz(0, 1);
     Rz(1, 1) = Rz(0, 0);
 
@@ -205,7 +206,7 @@ void Scene::load_scene(std::string filepath) {
 }
 
 void Scene::render() {
-    raytrace_spheres(&spheres[0], spheres.size(), &triangles[0], triangles.size(), &vertices[0], &normals[0], vertices.size(), &lights[0], lights.size(), image, camera);
+    raytrace_spheres(&spheres[0], spheres.size(), &triangles[0], triangles.size(), &vertices[0], &normals[0], &bounding_boxes[0], vertices.size(), bounding_boxes.size(), &lights[0], lights.size(), image, camera);
 
     size_t num_pixels = camera->width*camera->height;
 
@@ -228,8 +229,8 @@ void Scene::set_camera_intrinsics(float fov, size_t width, size_t height) {
     // h: image height (pixels)
     // f_x = f*w/W
     // f_y = f*h/H
-    camera->K[0*3 + 0] = width / (2*tanf(PI * fov / 360.f));    // f_x
-    camera->K[1*3 + 1] = width / (2*tanf(PI * fov / 360.f));    // f_y
+    camera->K[0*3 + 0] = width / (2*tanf(M_PI * fov / 360.f));    // f_x
+    camera->K[1*3 + 1] = width / (2*tanf(M_PI * fov / 360.f));    // f_y
     camera->K[2*3 + 2] = 1.f;                                   // 1
 
     camera->K[0*3 + 2] = width / 2;     // c_x
@@ -274,7 +275,6 @@ void Scene::add_sphere(CU_Vector3f pos, float radius, CU_Vector3f color, materia
 }
 
 void Scene::add_object(std::string inputfile, CU_Vector3f translation, CU_Vector3f scale, CU_Vector3f rotation, Material material) {
-    tinyobj::ObjReader reader;
 
     CU_Matrix<4> transform;
     transform.set_identity();
@@ -282,6 +282,7 @@ void Scene::add_object(std::string inputfile, CU_Vector3f translation, CU_Vector
     transform = rotation_matrix(rotation) * transform;
     transform.translate(translation);
 
+    tinyobj::ObjReader reader;
     if (!reader.ParseFromFile(inputfile)) {
         if (!reader.Error().empty()) {
             std::cerr << "TinyObjReader: " << reader.Error();
@@ -300,6 +301,10 @@ void Scene::add_object(std::string inputfile, CU_Vector3f translation, CU_Vector
     // Loop over shapes
     for (size_t s = 0; s < shapes.size(); s++) {
         // Loop over faces(polygon)
+        BoundingBox bounding_box;
+        bounding_box._max = CU_Vector3f(-INFINITY, -INFINITY, -INFINITY);
+        bounding_box._min = CU_Vector3f(INFINITY, INFINITY, INFINITY);
+
         size_t index_offset = 0;
         for (size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++) {
             size_t fv = size_t(shapes[s].mesh.num_face_vertices[f]);
@@ -317,6 +322,13 @@ void Scene::add_object(std::string inputfile, CU_Vector3f translation, CU_Vector
 
                 CU_Vector3f vtx = CU_Vector3f((float)vx, (float)vy, (float)vz);
                 vtx = transform * vtx;
+
+                for (size_t i = 0; i < 3; i++)
+                {
+                    if(vtx[i] < bounding_box._min[i]) { bounding_box._min[i] = vtx[i]; }
+                    else if(vtx[i] > bounding_box._max[i]) { bounding_box._max[i] = vtx[i]; }
+                }
+                
             
                 // Check if `normal_index` is zero or positive. negative = no normal data
                 if (idx.normal_index >= 0) {
@@ -363,40 +375,36 @@ void Scene::add_object(std::string inputfile, CU_Vector3f translation, CU_Vector
             Triangle t;
             t.v = CU_Vector3i(index_offset, index_offset+1, index_offset+2);
             t.n = CU_Vector3i(index_offset, index_offset+1, index_offset+2);
+            t.group = s;
 
             t.material = material;
             triangles.push_back(t);
 
             index_offset += fv;
-
             // per-face material
             // shapes[s].mesh.material_ids[f];
         }
+        bounding_boxes.push_back(bounding_box);
     }
+
+    std::cout << "Minimum bound: ";
+    for (size_t i = 0; i < 3; i++)
+    {
+        std::cout << bounding_boxes[0]._min[i] << ", ";
+    }
+    std::cout << std::endl;
+
+    std::cout << "Maximum bound: ";
+    for (size_t i = 0; i < 3; i++)
+    {
+        std::cout << bounding_boxes[0]._max[i] << ", ";
+    }
+    std::cout << std::endl;
+    std::cout << "Loaded " << bounding_boxes.size() << " objects." << std::endl;
 
     std::cout << "Loaded " << vertices.size() << " vertices." << std::endl;
     std::cout << "Loaded " << normals.size() << " normals." << std::endl;
     std::cout << "Loaded " << triangles.size() << " triangles." << std::endl;
-
-    // Triangle t;
-    // CU_Vector3f A(-10, 10.f, 22.f);
-    // CU_Vector3f B(-20, 0.f, 30.f);
-    // CU_Vector3f C(0.f, 0.f, 30.f);
-    // CU_Vector3f N = (B - A).cross(C - A);
-    // N.normalize();
-
-    // vertices.push_back(A);
-    // vertices.push_back(B);
-    // vertices.push_back(C);
-    // normals.push_back(N);
-    // normals.push_back(N);
-    // normals.push_back(N);
-
-    // t.v = CU_Vector3i(0, 1, 2);
-    // t.n = CU_Vector3i(0, 1, 2);
-
-    // t.material = material;
-    // triangles.push_back(t);
     return;
 }
 

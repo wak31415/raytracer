@@ -39,6 +39,7 @@ class Scene {
         std::vector<CU_Vector3f> normals;
         std::vector<CU_Vector<2, float>> uvs;
         std::vector<CU_Vector3f> vertexcolors;
+        std::vector<BoundingBox> bounding_boxes;
 
         std::vector<Light> lights;
         Camera* camera;
