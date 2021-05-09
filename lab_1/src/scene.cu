@@ -283,6 +283,9 @@ void Scene::add_object(std::string inputfile, CU_Vector3f translation, CU_Vector
     transform = rotation_matrix(rotation) * transform;
     transform.translate(translation);
 
+
+    // Largely copied from reference usage: https://github.com/tinyobjloader/tinyobjloader
+
     tinyobj::ObjReader reader;
     if (!reader.ParseFromFile(inputfile)) {
         if (!reader.Error().empty()) {
