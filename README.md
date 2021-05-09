@@ -53,13 +53,13 @@ make -j4
 You can render the default scene with
 
 ```bash
-./lab_1
+./render
 ```
 
 or a custom scene with
 
 ```bash
-./lab_1 ../assets/scenes/mesh_scene.json
+./render ../assets/scenes/mesh_scene.json
 ```
 
 

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.13)
-project(lab_1 LANGUAGES CXX CUDA)
+project(raytracer LANGUAGES CXX CUDA)
 
 find_package(nlohmann_json 3.2.0 REQUIRED)
 
@@ -19,9 +19,9 @@ set(SOURCE_FILES
     src/main.cu
 )
 
-add_executable(lab_1 ${SOURCE_FILES})
-target_link_libraries(lab_1 scene cudart)
-set_target_properties(lab_1 PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+add_executable(render ${SOURCE_FILES})
+target_link_libraries(render scene cudart)
+set_target_properties(render PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 
 set_property(TARGET scene PROPERTY CUDA_ARCHITECTURES 61)
-set_property(TARGET lab_1 PROPERTY CUDA_ARCHITECTURES 61)
+set_property(TARGET render PROPERTY CUDA_ARCHITECTURES 61)
