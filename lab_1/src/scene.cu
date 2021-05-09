@@ -30,7 +30,8 @@ void raytrace_spheres(Sphere* spheres,
                       Light* lights, 
                       size_t light_count,
                       CU_Vector3f* image, 
-                      Camera* camera
+                      Camera* camera, 
+                      size_t seed
 );
 
 CU_Matrix<4> rotation_matrix(float alpha, float beta, float gamma) {
@@ -205,8 +206,8 @@ void Scene::load_scene(std::string filepath) {
     image = (CU_Vector3f*)realloc(image, vertex_count*sizeof(CU_Vector3f));
 }
 
-void Scene::render() {
-    raytrace_spheres(&spheres[0], spheres.size(), &triangles[0], triangles.size(), &vertices[0], &normals[0], &bounding_boxes[0], vertices.size(), bounding_boxes.size(), &lights[0], lights.size(), image, camera);
+void Scene::render(std::string imagepath, size_t seed) {
+    raytrace_spheres(&spheres[0], spheres.size(), &triangles[0], triangles.size(), &vertices[0], &normals[0], &bounding_boxes[0], vertices.size(), bounding_boxes.size(), &lights[0], lights.size(), image, camera, seed);
 
     size_t num_pixels = camera->width*camera->height;
 
@@ -217,7 +218,7 @@ void Scene::render() {
         image_rgb[3*i + 1] = (unsigned char)(fminf(image[i][1], 255));
         image_rgb[3*i + 2] = (unsigned char)(fminf(image[i][2], 255));
     }
-    stbi_write_png("image.png", camera->width, camera->height, 3, &image_rgb[0], 0);
+    stbi_write_png(imagepath.c_str(), camera->width, camera->height, 3, &image_rgb[0], 0);
 }
 
 void Scene::set_camera_intrinsics(float fov, size_t width, size_t height) {

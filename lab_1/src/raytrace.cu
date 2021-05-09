@@ -11,8 +11,8 @@
 #define GAMMA 2.2
 #define MAX_RAY_DEPTH 5
 
-// #define INDIRECT_LIGHTING
-// #define ANTIALIASING
+#define INDIRECT_LIGHTING
+#define ANTIALIASING
 #define BOUNDING_BOX
 
 __global__ void initialize_states(unsigned int seed, size_t width, curandState_t* states) {
@@ -518,7 +518,8 @@ void raytrace_spheres(Sphere* spheres,
                       Light* lights, 
                       size_t light_count, 
                       CU_Vector3f* image, 
-                      Camera* camera) 
+                      Camera* camera,
+                      size_t seed) 
 {
     size_t pixel_count = camera->width * camera->height;
 
@@ -570,7 +571,7 @@ void raytrace_spheres(Sphere* spheres,
 
     clock_t t = std::clock();
 
-    initialize_states<<<blocksPerGrid, threadsPerBlock>>>(time(0), camera->width, d_states);
+    initialize_states<<<blocksPerGrid, threadsPerBlock>>>(time(0) + seed, camera->width, d_states);
     
     cudaDeviceSynchronize();
 

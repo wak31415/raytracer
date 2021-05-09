@@ -12,7 +12,7 @@ class Scene {
 
         void load_scene(std::string filepath);
 
-        void render();
+        void render(std::string imagepath, size_t seed);
 
         void set_camera_intrinsics(float fov, size_t width, size_t height);
 

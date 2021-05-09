@@ -10,8 +10,8 @@ int main(int argc, char** argv) {
         scene_path = std::string(argv[1]);
         std::cout << "Using custom scene located at " << scene_path << std::endl;
     }
-    
+
     Scene main_scene;
     main_scene.load_scene(scene_path);
-    main_scene.render();
+    main_scene.render("image.png", 1);
 }
